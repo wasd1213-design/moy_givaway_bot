@@ -1,39 +1,54 @@
-import sqlite3
+import os
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-import os
-import threading
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # ====== ВАШ ТОКЕН ======
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGPd2BSCT8mDm6hMp-1c1XYS-7PL0QAG3E")
 
 # ====== НАСТРОЙКИ ======
-SPONSORS = ["@openbusines", "@sponsor2", "@sponsor3"]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
+SPONSORS = ["@openbusines", "@SAGkatalog", "@sponsor3"]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
 PRIZE = "🎁 Telegram Premium на 6 месяцев ИЛИ 1500 ⭐"
+
+# Подключение к PostgreSQL
+def get_db_connection():
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL не установлен. Настройте в Railway.")
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 # Инициализация базы данных
 def init_db():
-    conn = sqlite3.connect('giveaway.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # Таблица пользователей
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
+            user_id BIGINT PRIMARY KEY,
             username TEXT,
             ref_count INTEGER DEFAULT 0,
             tickets INTEGER DEFAULT 0,
+            all_subscribed INTEGER DEFAULT 0,
+            last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # Таблица рефералов
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS referrals (
-            referrer_id INTEGER,
-            referred_id INTEGER,
+            referrer_id BIGINT,
+            referred_id BIGINT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(referrer_id, referred_id)
         )
     ''')
+    
     conn.commit()
+    cursor.close()
     conn.close()
 
 # Проверка подписки на канал
@@ -48,20 +63,22 @@ async def check_subscription(user_id, channel, context):
 
 # Расчёт билетов
 def calculate_tickets(user_id):
-    conn = sqlite3.connect('giveaway.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT ref_count, all_subscribed FROM users WHERE user_id = %s", (user_id,))
     result = cursor.fetchone()
+    cursor.close()
     conn.close()
-    if not result:
+    
+    if not result or result[1] == 0:
         return 0
-    ref_count = result[0]
-    if ref_count < 2:
+    if result[0] < 2:
         return 0
-    return min(10, 1 + max(0, ref_count - 2))
+    return min(10, 1 + max(0, result[0] - 2))
 
 # Формирование сообщения статуса
 async def build_status_message(user_id, username, context):
+    # Проверяем подписки
     subscribed_channels = []
     unsubscribed_channels = []
     
@@ -72,8 +89,21 @@ async def build_status_message(user_id, username, context):
             unsubscribed_channels.append(f"❌ {channel}")
     
     all_subscribed = len(unsubscribed_channels) == 0
-    tickets = calculate_tickets(user_id) if all_subscribed else 0
     
+    # Сохраняем статус в БД
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO users (user_id, username, all_subscribed, last_checked) VALUES (%s, %s, %s, CURRENT_TIMESTAMP) ON CONFLICT (user_id) DO UPDATE SET all_subscribed = %s, last_checked = CURRENT_TIMESTAMP",
+        (user_id, username, 1 if all_subscribed else 0, 1 if all_subscribed else 0)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    tickets = calculate_tickets(user_id)
+    
+    # Формируем текст
     if not all_subscribed:
         status_text = (
             "⚠️ Вы не подписаны на все каналы!\n\n"
@@ -92,6 +122,7 @@ async def build_status_message(user_id, username, context):
             f"💡 Каждый новый реферал = +1 билет (макс. 10)"
         )
     
+    # Кнопки
     keyboard = [
         [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
@@ -106,31 +137,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
     username = user.first_name
     
-    conn = sqlite3.connect('giveaway.db')
+    # Сохраняем пользователя
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)",
+        "INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING",
         (user_id, user.username or f"user_{user_id}")
     )
     
+    # Обработка реферала
     if context.args:
         referrer_id = context.args[0]
         if referrer_id.isdigit() and int(referrer_id) != user_id:
             try:
                 cursor.execute(
-                    "INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
+                    "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                     (int(referrer_id), user_id)
                 )
                 cursor.execute(
-                    "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = ?",
+                    "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s",
                     (int(referrer_id),)
                 )
-            except:
-                pass
+            except Exception as e:
+                print(f"Ошибка реферала: {e}")
     
     conn.commit()
+    cursor.close()
     conn.close()
     
+    # Отправляем статус
     text, markup = await build_status_message(user_id, username, context)
     await update.message.reply_text(text, reply_markup=markup)
 
@@ -156,7 +191,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]))
     
     elif query.data == "my_reflink":
-        link = f"https://t.me/moy_giveaway_bot?start={user_id}"  # ← ЗАМЕНИТЕ!
+        link = f"https://t.me/moy_giveaway_bot?start={user_id}"  # ← ЗАМЕНИТЕ НА ЮЗЕРНЕЙМ ВАШЕГО БОТА!
         text = (
             f"🔗 Ваша реферальная ссылка:\n\n{link}\n\n"
             f"📤 Отправьте друзьям! Каждый, кто перейдёт и запустит бота, засчитается как реферал.\n"
@@ -186,7 +221,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text, markup = await build_status_message(user_id, username, context)
         await query.edit_message_text(text, reply_markup=markup)
 
-# Запуск бота (без Flask, без threading!)
+# Запуск бота
 def main():
     init_db()
     application = Application.builder().token(BOT_TOKEN).build()
@@ -194,7 +229,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    print("✅ Бот запущен! Ожидание команд...")
+    print("✅ Бот запущен с PostgreSQL!")
     application.run_polling()
 
 if __name__ == "__main__":
