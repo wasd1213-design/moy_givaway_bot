@@ -75,9 +75,9 @@ def calculate_tickets(user_id):
     
     if not result or result[1] == 0:
         return 0
-    if result[0] < 2:
-        return 0
-    return min(10, 1 + max(0, result[0] - 2))
+   if result[0] < 1:
+    return 0
+return min(10, result[0])
 
 # Формирование сообщения статуса
 async def build_status_message(user_id, username, context):
