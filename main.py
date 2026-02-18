@@ -55,9 +55,14 @@ async def check_subscription(user_id, channel, context):
     try:
         chat_id = channel.lstrip('@')
         chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+        
+        # Логирование результата запроса
+        print(f"[DEBUG] Проверка {channel} для user_id {user_id} — статус: {chat_member.status}")
+        
         return chat_member.status in ["member", "administrator", "creator"]
     except Exception as e:
-        print(f"Ошибка проверки {channel}: {e}")
+        # Логировать именно user_id, канал и ошибку!
+        print(f"[ERROR] channel: {channel}, user_id: {user_id}, ошибка: {e}")
         return False
 
 # Расчёт билетов
