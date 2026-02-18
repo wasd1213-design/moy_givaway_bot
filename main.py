@@ -140,7 +140,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
     username = user.first_name
 
-    # Сохраняем пользователя (оставь свой код, если ниже есть)
+    # 1. Сохраняем пользователя в базе (отдельное соединение)
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -151,6 +151,40 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cursor.close()
     conn.close()
 
+    # 2. Обработка реферала (новое соединение - ВАЖНО!)
+    if context.args:
+        referrer_id = context.args[0]
+        if referrer_id.isdigit() and int(referrer_id) != user_id:
+            try:
+                subscribed_any = False
+                for channel in SPONSORS:
+                    if channel and await check_subscription(user_id, channel, context):
+                        subscribed_any = True
+                        break
+                if subscribed_any:
+                    # <-- Всё, что ниже: новое соединение! 
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                        (int(referrer_id), user_id)
+                    )
+                    cursor.execute(
+                        "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s",
+                        (int(referrer_id),)
+                    )
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    print(f"[REF] Пользователь {user_id} засчитан как реферал для {referrer_id}")
+                else:
+                    await update.message.reply_text(
+                        "Чтобы считаться рефералом, нужно подписаться хотя бы на 1 канал-спонсора!"
+                    )
+            except Exception as e:
+                print(f"Ошибка при обработке реферала: {e}")
+
+    # 3. Приветствие
     welcome_text = (
         "👋 <b>Привет, {username}!</b>\n\n"
         "Добро пожаловать в наш регулярный <b>Telegram Giveaway!</b>\n\n"
@@ -166,7 +200,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "❗️ <i>Чем больше рефералов — тем больше шансов на победу!</i>\n"
     ).format(username=username)
 
-    # Кнопки под приветствием
     keyboard = [
         [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
@@ -181,44 +214,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         disable_web_page_preview=True
     )
 
-    # После этого вставляй ниже свою обработку/логику по рефералам при необходимости.
-    
-    # Обработка реферала с антибот-защитой (подписка хотя бы на 1 канал)
-    if context.args:
-        referrer_id = context.args[0]
-        if referrer_id.isdigit() and int(referrer_id) != user_id:
-            try:
-                # Проверяем: подписан ли пользователь хотя бы на один канал-спонсор
-                subscribed_any = False
-                for channel in SPONSORS:
-                    if channel and await check_subscription(user_id, channel, context):
-                        subscribed_any = True
-                        break
-                if subscribed_any:
-                    cursor.execute(
-                        "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                        (int(referrer_id), user_id)
-                    )
-                    cursor.execute(
-                        "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s",
-                        (int(referrer_id),)
-                    )
-                    print(f"[REF] Пользователь {user_id} засчитан как реферал для {referrer_id}")
-                else:
-                    await update.message.reply_text(
-                        "Чтобы считаться рефералом, нужно подписаться хотя бы на 1 канал-спонсора!"
-                    )
-            except Exception as e:
-                print(f"Ошибка реферала: {e}")
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    # Отправляем статус
+    # 4. Статус пользователя после старта
     text, markup = await build_status_message(user_id, username, context)
     await update.message.reply_text(text, reply_markup=markup)
-
 # Обработчик кнопок
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("[DEBUG] Обработчик кнопки вызван")
