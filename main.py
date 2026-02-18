@@ -149,11 +149,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         (user_id, user.username or f"user_{user_id}")
     )
     
-    # Обработка реферала
-    if context.args:
-        referrer_id = context.args[0]
-        if referrer_id.isdigit() and int(referrer_id) != user_id:
-            try:
+    # Обработка реферала с антибот-защитой (подписка хотя бы на 1 канал)
+if context.args:
+    referrer_id = context.args[0]
+    if referrer_id.isdigit() and int(referrer_id) != user_id:
+        try:
+            # Проверяем: подписан ли пользователь хотя бы на один канал-спонсор
+            subscribed_any = False
+            for channel in SPONSORS:
+                if channel and await check_subscription(user_id, channel, context):
+                    subscribed_any = True
+                    break
+            if subscribed_any:
                 cursor.execute(
                     "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                     (int(referrer_id), user_id)
@@ -162,8 +169,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s",
                     (int(referrer_id),)
                 )
-            except Exception as e:
-                print(f"Ошибка реферала: {e}")
+                print(f"[REF] Пользователь {user_id} засчитан как реферал для {referrer_id}")
+            else:
+                else:
+    try:
+        await update.message.reply_text(
+            "Чтобы считаться рефералом, нужно подписаться хотя бы на 1 канал-спонсора!"
+        )
+    except Exception:
+        pass
+        except Exception as e:
+            print(f"Ошибка реферала: {e}")
     
     conn.commit()
     cursor.close()
