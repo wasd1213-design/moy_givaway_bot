@@ -65,19 +65,19 @@ async def check_subscription(user_id, channel, context):
         return False
 
 # Расчёт билетов
-    def calculate_tickets(user_id):
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT ref_count, all_subscribed FROM users WHERE user_id = %s", (user_id,))
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-    
-        if not result or result[1] == 0:
-            return 0
-        if result[0] < 1:
-            return 0
-        return min(10, result[0])
+def calculate_tickets(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT ref_count, all_subscribed FROM users WHERE user_id = %s", (user_id,))
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not result or result[1] == 0:
+        return 0
+    if result[0] < 1:
+        return 0
+    return min(10, result[0])
 
 # Формирование сообщения статуса
 async def build_status_message(user_id, username, context):
@@ -121,7 +121,7 @@ async def build_status_message(user_id, username, context):
             f"✅ Вы подписаны на все каналы!\n" +
             "\n".join(subscribed_channels) + "\n\n"
             f"🎫 Ваши билеты: {tickets} / 10\n"
-            f"👥 Рефералов: {tickets + 1 if tickets > 0 else 0} (минимум 2 для участия)\n\n"
+            f"👥 Рефералов: {tickets if tickets > 0 else 0} (минимум 1 для участия)\n\n"
             f"💡 Каждый новый реферал = +1 билет (макс. 10)"
         )
     
@@ -194,7 +194,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "-----------------------\n"
         "1️⃣ <b>Подпишись на все каналы спонсоров:</b>\n"
         + ''.join(f"{i+1}. <a href='https://t.me/{chan.replace('@', '')}'>{chan}</a>\n" for i, chan in enumerate(SPONSORS) if chan) +
-        "2️⃣ <b>Пригласи минимум 2 друзей по своей реферальной ссылке</b> (получишь её ниже)\n"
+        "2️⃣ <b>Пригласи минимум 1 друга по своей реферальной ссылке</b> (получишь её ниже)\n"
         "3️⃣ <b>За каждого нового друга — ещё +1 билет на розыгрыш (макс. 10)</b>\n\n"
         "⏳ <b>Новый розыгрыш — каждую неделю!</b>\n\n"
         "❗️ <i>Чем больше рефералов — тем больше шансов на победу!</i>\n"
@@ -232,7 +232,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "my_tickets":
         tickets = calculate_tickets(user_id)
-        status = "✅ Вы участвуете!" if tickets > 0 else "⏳ Нужно 2 реферала для участия"
+        status = "✅ Вы участвуете!" if tickets > 0 else "⏳ Нужно 1 реферал для участия"
         text = f"🎫 Ваши билеты: {tickets} / 10\n{status}\n\n💡 Каждый новый реферал = +1 билет!"
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить статус", callback_data="refresh_status")],
@@ -255,10 +255,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             "📜 ПРАВИЛА РОЗЫГРЫША:\n\n"
             "1️⃣ Подпишитесь на все 3 канала спонсоров\n"
-            "2️⃣ Пригласите минимум 2 друзей по вашей ссылке\n"
+            "2️⃣ Пригласите минимум 1 друга по вашей ссылке\n"
             "3️⃣ Каждый дополнительный реферал = +1 билет (макс. 10)\n"
             "4️⃣ Розыгрыш каждые 7 дней\n"
-            "5️⃣ Победители связываются с админом (@ваш_юзернейм) в течение 48 часов\n\n"
+            "5️⃣ Победители связываются с админом в течение 48 часов\n\n"
             "⚠️ Приз аннулируется при отсутствии контакта!"
         )
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([
