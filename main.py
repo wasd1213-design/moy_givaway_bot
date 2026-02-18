@@ -233,9 +233,69 @@ def main():
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
+
+# Добавь ЭТИ три строки:
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CommandHandler("draw", draw))
+    application.add_handler(CommandHandler("stats", stats))
     
     print("✅ Бот запущен с PostgreSQL!")
     application.run_polling()
+
+import random
+
+# Список user_id админов (укажи свои!)
+ADMINS = [514167463]  # ← сюда добавь свои user_id (можно узнать через @getmyid_bot в Telegram)
+
+# Команда /admin - простая админ-панель
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMINS:
+        await update.message.reply_text("Нет доступа!")
+        return
+    await update.message.reply_text(
+        "🔒 Админ-панель:\n"
+        "/draw — запустить розыгрыш\n"
+        "/stats — показать участников"
+    )
+
+# Команда для розыгрыша
+async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMINS:
+        await update.message.reply_text("Нет доступа!")
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, username, tickets FROM users WHERE tickets > 0")
+    participants = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    if not participants:
+        await update.message.reply_text("Нет участников для розыгрыша.")
+        return
+    winner = random.choice(participants)
+    await update.message.reply_text(
+        f"🎉 Победитель: @{winner[1] or 'user_' + str(winner[0])} (id: {winner[0]}), билетов: {winner[2]}"
+    )
+
+# Команда для просмотра всех участников
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMINS:
+        await update.message.reply_text("Нет доступа!")
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, username, tickets FROM users WHERE tickets > 0 ORDER BY tickets DESC")
+    participants = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    if not participants:
+        await update.message.reply_text("Нет участников, соответствующих условиям.")
+        return
+    text = "\n".join([f"{i+1}. @{u[1] or 'user_' + str(u[0])} — билетов: {u[2]}" for i, u in enumerate(participants)])
+    await update.message.reply_text("🎫 Участники:\n" + text)
 
 if __name__ == "__main__":
     main()
