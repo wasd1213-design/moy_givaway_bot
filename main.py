@@ -149,7 +149,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         (user_id, user.username or f"user_{user_id}")
     )
     
-    # Обработка реферала с антибот-защитой (подписка хотя бы на 1 канал)
+  # Обработка реферала с антибот-защитой (подписка хотя бы на 1 канал)
 if context.args:
     referrer_id = context.args[0]
     if referrer_id.isdigit() and int(referrer_id) != user_id:
@@ -171,20 +171,16 @@ if context.args:
                 )
                 print(f"[REF] Пользователь {user_id} засчитан как реферал для {referrer_id}")
             else:
-                else:
-    try:
-        await update.message.reply_text(
-            "Чтобы считаться рефералом, нужно подписаться хотя бы на 1 канал-спонсора!"
-        )
-    except Exception:
-        pass
+                await update.message.reply_text(
+                    "Чтобы считаться рефералом, нужно подписаться хотя бы на 1 канал-спонсора!"
+                )
         except Exception as e:
             print(f"Ошибка реферала: {e}")
-    
+
     conn.commit()
     cursor.close()
     conn.close()
-    
+
     # Отправляем статус
     text, markup = await build_status_message(user_id, username, context)
     await update.message.reply_text(text, reply_markup=markup)
