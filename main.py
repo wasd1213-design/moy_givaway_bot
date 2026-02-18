@@ -9,7 +9,7 @@ from psycopg2.extras import RealDictCursor
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGPd2BSCT8mDm6hMp-1c1XYS-7PL0QAG3E")
 
 # ====== НАСТРОЙКИ ======
-SPONSORS = ["@openbusines", "@SAGkatalog", "@pepperru"]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
+SPONSORS = ["@openbusines", "@SAGkatalog", ""]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
 PRIZE = "🎁 Telegram Premium на 6 месяцев ИЛИ 1500 ⭐"
 
 # Подключение к PostgreSQL
