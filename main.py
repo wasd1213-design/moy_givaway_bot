@@ -14,11 +14,10 @@ PRIZE = "🎁 Telegram Premium на 6 месяцев ИЛИ 1500 ⭐"
 
 # Подключение к PostgreSQL
 def get_db_connection():
-    DATABASE_URL = os.getenv("DATABASE_URL")
+    DATABASE_URL = os.getenv("MY_DATABASE_URL")  # ← вот оно!
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL не установлен. Настройте в Railway.")
+        raise ValueError("MY_DATABASE_URL не установлен. Настройте в Railway.")
     return psycopg2.connect(DATABASE_URL, sslmode='require')
-
 # Инициализация базы данных
 def init_db():
     conn = get_db_connection()
