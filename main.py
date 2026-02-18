@@ -137,6 +137,7 @@ async def build_status_message(user_id, username, context):
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("[DEBUG] Запущена команда /start")
     user = update.effective_user
     user_id = user.id
     username = user.first_name
@@ -175,6 +176,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Обработчик кнопок
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("[DEBUG] Обработчик кнопки вызван")
     query = update.callback_query
     await query.answer()
     user = query.from_user
