@@ -136,18 +136,52 @@ async def build_status_message(user_id, username, context):
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("[DEBUG] Запущена команда /start")
     user = update.effective_user
     user_id = user.id
     username = user.first_name
-    
-    # Сохраняем пользователя
+
+    # Сохраняем пользователя (оставь свой код, если ниже есть)
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING",
         (user_id, user.username or f"user_{user_id}")
     )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    welcome_text = (
+        "👋 <b>Привет, {username}!</b>\n\n"
+        "Добро пожаловать в наш регулярный <b>Telegram Giveaway!</b>\n\n"
+        "🎁 <b>Приз недели:</b>\n"
+        "Telegram Premium на 6 месяцев <b>или</b> 1500 ⭐️ на твой счёт!\n\n"
+        "Как участвовать?\n"
+        "-----------------------\n"
+        "1️⃣ <b>Подпишись на все каналы спонсоров:</b>\n"
+        + ''.join(f"{i+1}. <a href='https://t.me/{chan.replace('@', '')}'>{chan}</a>\n" for i, chan in enumerate(SPONSORS) if chan) +
+        "2️⃣ <b>Пригласи минимум 2 друзей по своей реферальной ссылке</b> (получишь её ниже)\n"
+        "3️⃣ <b>За каждого нового друга — ещё +1 билет на розыгрыш (макс. 10)</b>\n\n"
+        "⏳ <b>Новый розыгрыш — каждую неделю!</b>\n\n"
+        "❗️ <i>Чем больше рефералов — тем больше шансов на победу!</i>\n"
+    ).format(username=username)
+
+    # Кнопки под приветствием
+    keyboard = [
+        [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
+        [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
+        [InlineKeyboardButton("🏆 Условия розыгрыша", callback_data="rules")],
+        [InlineKeyboardButton("🔄 Обновить статус", callback_data="refresh_status")]
+    ]
+
+    await update.message.reply_text(
+        welcome_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML',
+        disable_web_page_preview=True
+    )
+
+    # После этого вставляй ниже свою обработку/логику по рефералам при необходимости.
     
     # Обработка реферала с антибот-защитой (подписка хотя бы на 1 канал)
     if context.args:
