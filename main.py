@@ -65,19 +65,19 @@ async def check_subscription(user_id, channel, context):
         return False
 
 # Расчёт билетов
-def calculate_tickets(user_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT ref_count, all_subscribed FROM users WHERE user_id = %s", (user_id,))
-    result = cursor.fetchone()
-    cursor.close()
-    conn.close()
+    def calculate_tickets(user_id):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT ref_count, all_subscribed FROM users WHERE user_id = %s", (user_id,))
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
     
-    if not result or result[1] == 0:
-        return 0
-   if result[0] < 1:
-    return 0
-return min(10, result[0])
+        if not result or result[1] == 0:
+            return 0
+        if result[0] < 1:
+            return 0
+        return min(10, result[0])
 
 # Формирование сообщения статуса
 async def build_status_message(user_id, username, context):
