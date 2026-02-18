@@ -9,7 +9,7 @@ from psycopg2.extras import RealDictCursor
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGPd2BSCT8mDm6hMp-1c1XYS-7PL0QAG3E")
 
 # ====== НАСТРОЙКИ ======
-SPONSORS = ["https://t.me/openbusines", "https://t.me/SAGkatalog", "@sponsor3"]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
+SPONSORS = ["@openbusines", "@SAGkatalog", "@pepperru"]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
 PRIZE = "🎁 Telegram Premium на 6 месяцев ИЛИ 1500 ⭐"
 
 # Подключение к PostgreSQL
@@ -53,8 +53,7 @@ def init_db():
 # Проверка подписки на канал
 async def check_subscription(user_id, channel, context):
     try:
-        chat_id = channel.lstrip('@')
-        chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+        chat_member = await context.bot.get_chat_member(chat_id=channel, user_id=user_id)
         
         # Логирование результата запроса
         print(f"[DEBUG] Проверка {channel} для user_id {user_id} — статус: {chat_member.status}")
