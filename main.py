@@ -16,7 +16,7 @@ def mask_username(username: str) -> str:
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGvd7NOy4kA98Gdn6ZVdgkIzAWtZjAgI8s")
 
 # ====== НАСТРОЙКИ ======
-SPONSORS = ["@openbusines", "@SAGkatalog", ""]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
+SPONSORS = ["@openbusines", "@SAGkatalog", "@pro_teba_lubimyu"]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
 PRIZE = "🎁 Telegram Premium на 6 месяцев ИЛИ 1500 ⭐"
 
 # Подключение к PostgreSQL
@@ -137,6 +137,7 @@ async def build_status_message(user_id, username, context):
         [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
         [InlineKeyboardButton("🔄 Обновить статус", callback_data="refresh_status")],
+        [InlineKeyboardButton("🏅 Лидерборд", callback_data="leaderboard")],
         [InlineKeyboardButton("🏆 Условия розыгрыша", callback_data="rules")]
     ]
     return status_text, InlineKeyboardMarkup(keyboard)
@@ -245,7 +246,39 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔄 Обновить статус", callback_data="refresh_status")],
             [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
         ]))
-    
+ 
+    elif query.data == "leaderboard":
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, tickets FROM users WHERE tickets > 0 ORDER BY tickets DESC LIMIT 10")
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            await query.edit_message_text("Ошибка при получении лидерборда.")
+            print(f"[ERROR] leaderboard: {e}")
+            return
+        if not rows:
+            await query.edit_message_text("Пока никто не заработал билеты.")
+            return
+
+        text = "<b>🏆 Лидерборд по билетам:</b>\n\n"
+        for i, row in enumerate(rows, 1):
+            username = row[0] or ""
+            masked = mask_username(username)
+            tickets = row[1]
+            text += f"{i}. <b>{masked}</b> — {tickets} билетов\n"
+
+        # Кнопка “Назад” для возврата в главное меню
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+            ])
+        )
+        
     elif query.data == "my_reflink":
         link = f"https://t.me/moy_giveaway_bot?start={user_id}"  # ← ЗАМЕНИТЕ НА ЮЗЕРНЕЙМ ВАШЕГО БОТА!
         text = (
