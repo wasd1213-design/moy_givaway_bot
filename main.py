@@ -6,7 +6,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # ====== ВАШ ТОКЕН ======
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGPd2BSCT8mDm6hMp-1c1XYS-7PL0QAG3E")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGvd7NOy4kA98Gdn6ZVdgkIzAWtZjAgI8s")
 
 # ====== НАСТРОЙКИ ======
 SPONSORS = ["@openbusines", "@SAGkatalog", ""]  # ← ЗАМЕНИТЕ НА СВОИ КАНАЛЫ!
