@@ -5,6 +5,13 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+def mask_username(username: str) -> str:
+    if not username:
+        return "Без ника"
+    if len(username) <= 2:
+        return username[0] + "**"
+    return username[0] + "**" + username[-1]
+
 # ====== ВАШ ТОКЕН ======
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGvd7NOy4kA98Gdn6ZVdgkIzAWtZjAgI8s")
 
@@ -282,6 +289,7 @@ def main():
     application.add_handler(CommandHandler("admin", admin_panel))
     application.add_handler(CommandHandler("draw", draw))
     application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("leaderboard", leaderboard))
     
     print("✅ Бот запущен с PostgreSQL!")
     application.run_polling()
@@ -340,6 +348,34 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     text = "\n".join([f"{i+1}. @{u[1] or 'user_' + str(u[0])} — билетов: {u[2]}" for i, u in enumerate(participants)])
     await update.message.reply_text("🎫 Участники:\n" + text)
+
+from telegram.constants import ParseMode
+
+async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, tickets FROM users WHERE tickets > 0 ORDER BY tickets DESC LIMIT 10")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        await update.message.reply_text("Ошибка при получении лидерборда.")
+        print(f"[ERROR] leaderboard: {e}")
+        return
+
+    if not rows:
+        await update.message.reply_text("Пока никто не заработал билеты.")
+        return
+
+    text = "<b>🏆 Лидерборд по билетам:</b>\n\n"
+    for i, row in enumerate(rows, 1):
+        username = row[0] or ""
+        masked = mask_username(username)
+        tickets = row[1]
+        text += f"{i}. <b>{masked}</b> — {tickets} билетов\n"
+
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 if __name__ == "__main__":
     main()
