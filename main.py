@@ -292,9 +292,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"[ERROR] leaderboard callback: {e}")
             return
         
-        if not rows:
-            await query.edit_message_text("Пока никто не заработал билеты.", parse_mode=ParseMode.HTML)
-            return
+    if not rows:
+       await query.edit_message_text(
+        "Пока никто не заработал билеты.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+        ])
+    )
+    return
 
         text = "<b>🏆 Лидерборд по билетам:</b>\n\n"
         for i, row in enumerate(rows, 1):
