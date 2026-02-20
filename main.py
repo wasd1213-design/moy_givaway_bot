@@ -282,40 +282,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]), parse_mode=ParseMode.HTML)
  
     elif query.data == "leaderboard":
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("SELECT username, tickets FROM users WHERE tickets > 0 ORDER BY tickets DESC LIMIT 10")
-                    rows = cursor.fetchall()
-        except Exception as e:
-            await query.edit_message_text("Ошибка при получении лидерборда.", parse_mode=ParseMode.HTML)
-            print(f"[ERROR] leaderboard callback: {e}")
-            return
-        
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT username, tickets FROM users WHERE tickets > 0 ORDER BY tickets DESC LIMIT 10")
+                rows = cursor.fetchall()
+    except Exception as e:
+        await query.edit_message_text("Ошибка при получении лидерборда.", parse_mode=ParseMode.HTML)
+        print(f"[ERROR] leaderboard callback: {e}")
+        return
+
     if not rows:
-       await query.edit_message_text(
-        "Пока никто не заработал билеты.",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
-        ])
-    )
-    return
-
-        text = "<b>🏆 Лидерборд по билетам:</b>\n\n"
-        for i, row in enumerate(rows, 1):
-            username_from_db = row[0] or ""
-            masked = mask_username(username_from_db)
-            tickets = row[1]
-            text += f"{i}. <b>{masked}</b> — {tickets} билетов\n"
-
         await query.edit_message_text(
-            text,
+            "Пока никто не заработал билеты.",
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
             ])
         )
+        return
+
+    text = "<b>🏆 Лидерборд по билетам:</b>\n\n"
+    for i, row in enumerate(rows, 1):
+        username_from_db = row[0] or ""
+        masked = mask_username(username_from_db)
+        tickets = row[1]
+        text += f"{i}. <b>{masked}</b> — {tickets} билетов\n"
+
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+        ])
+    )
         
     elif query.data == "my_reflink":
         # Используем BOT_USERNAME_FOR_REFLINK
