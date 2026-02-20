@@ -473,7 +473,7 @@ def main():
     application.add_handler(CommandHandler("leaderboard", leaderboard_command))
     
     print("✅ Бот запущен!")
-    application.run_polling()
+    application.run_polling(poll_interval=0.1)
 
 if __name__ == "__main__":
     main()
