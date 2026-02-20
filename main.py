@@ -281,7 +281,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
         ]), parse_mode=ParseMode.HTML)
  
-    elif query.data == "leaderboard":
+elif query.data == "leaderboard":
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
