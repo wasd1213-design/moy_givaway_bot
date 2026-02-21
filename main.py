@@ -67,7 +67,7 @@ def init_db():
 # --- Функции ---
 def mask_username(username: str) -> str:
     if not username: return "User"
-    if len(username) <= 2: return username[0] + "**"
+    if len(username) <= 2: return username + "*"
     return username[0] + "**" + username[-1]
 
 async def check_subscription(user_id, channel, context):
@@ -90,12 +90,12 @@ def calculate_tickets(user_id):
     except:
         return 0
 
-# --- СТАТУС ПОЛЬЗОВАТЕЛЯ (ВИД СПОНСОРОВ) ---
+# --- СТАТУС ПОЛЬЗОВАТЕЛЯ (ГЛАВНОЕ МЕНЮ) ---
 async def build_status_message(user_id, first_name, context):
     subs = []
     unsubs = []
     
-    # Проверяем подписку (Старый добрый метод)
+    # Проверяем подписки
     for ch in SPONSORS:
         if await check_subscription(user_id, ch, context):
             subs.append(f"✅ {ch}")
@@ -104,7 +104,7 @@ async def build_status_message(user_id, first_name, context):
     
     all_ok = (len(unsubs) == 0)
     
-    # Сохраняем в БД
+    # Обновляем БД
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
@@ -124,7 +124,7 @@ async def build_status_message(user_id, first_name, context):
         print(f"Error update user: {e}")
         tickets = 0
 
-    # Если НЕ подписан - показываем список каналов (как было раньше)
+    # Если НЕ подписан - список каналов
     if not all_ok:
         msg = (
             "⚠️ <b>ВЫ НЕ УЧАСТВУЕТЕ!</b>\n\n"
@@ -133,7 +133,7 @@ async def build_status_message(user_id, first_name, context):
             "После подписки нажмите кнопку «🔄 Обновить статус»"
         )
     else:
-        # Если подписан - показываем меню
+        # Если подписан - меню
         msg = (
             f"👋 Привет, {first_name}!\n\n"
             f"🎁 <b>Розыгрыш:</b> {PRIZE}\n\n"
@@ -148,7 +148,7 @@ async def build_status_message(user_id, first_name, context):
         [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
         [InlineKeyboardButton("🔄 Обновить статус", callback_data="refresh_status")],
         [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],
-        [InlineKeyboardButton("📜 Правила", callback_data="rules")]
+        [InlineKeyboardButton("📜 Условия розыгрыша", callback_data="rules")] 
     ]
     return msg, InlineKeyboardMarkup(kb)
 
@@ -222,7 +222,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
-    # --- СПИСОК ПОБЕДИТЕЛЕЙ (С КНОПКОЙ НАЗАД) ---
     elif data == "winners_list":
         try:
             with get_db_connection() as conn:
@@ -257,14 +256,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(res, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
-    # --- ПРАВИЛА (СТАНДАРТНЫЙ ВИД) ---
+    # --- УСЛОВИЯ РОЗЫГРЫША (ОБНОВЛЕНО) ---
     elif data == "rules":
         text = (
-            "📜 <b>Правила:</b>\n"
-            "1. Подписка на спонсоров обязательна.\n"
-            "2. Запрещена накрутка ботов.\n"
-            "3. Приз вручается в течение 48 часов.\n"
-            "4. После каждого розыгрыша билеты обнуляются."
+            "📜 <b>Условия розыгрыша:</b>\n\n"
+            "1️⃣ <b>Подписка</b> на все каналы спонсоров обязательна.\n\n"
+            "2️⃣ <b>Приглашение друга обязательно!</b>\n"
+            "Чтобы получить свой первый билет, нужно пригласить хотя бы 1 человека.\n"
+            "<i>(1 друг = 1 билет)</i>\n\n"
+            "3️⃣ Чем больше друзей, тем выше шансы (макс 10 билетов).\n\n"
+            "4️⃣ Запрещена накрутка ботов.\n\n"
+            "5️⃣ Приз вручается в течение 48 часов."
         )
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
@@ -299,11 +301,12 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # Берем только тех, кто подписан И ИМЕЕТ БИЛЕТЫ (>0)
                 cur.execute("SELECT user_id, username, tickets FROM users WHERE tickets > 0 AND all_subscribed = 1")
                 rows = cur.fetchall()
         
         if not rows:
-            await update.message.reply_text("Нет участников.")
+            await update.message.reply_text("Нет участников (нужен минимум 1 билет).")
             return
 
         pool = []
@@ -313,7 +316,6 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
         winner = random.choice(pool)
         wid, wname, wtickets = winner
         
-        # Запись в таблицу победителей
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
