@@ -254,4 +254,114 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Текст?")
         return
     msg = " ".join(context.args)
-    await update
+    await update.message.reply_text("Рассылка...")
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id FROM users")
+                users = cur.fetchall()
+        for u in users:
+            try:
+                await context.bot.send_message(u[0], msg)
+                await asyncio.sleep(0.05)
+            except: pass
+        await update.message.reply_text("Готово.")
+    except: pass
+
+async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS: return
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Только подписанные и с билетами > 0
+                cur.execute("SELECT user_id, username, tickets FROM users WHERE tickets > 0 AND all_subscribed = 1")
+                rows = cur.fetchall()
+        
+        if not rows:
+            await update.message.reply_text("Нет участников.")
+            return
+
+        pool = []
+        for r in rows:
+            pool.extend([r] * r[2]) 
+        
+        winner = random.choice(pool)
+        wid, wname, wtickets = winner
+        
+        # 1. Запись в БД
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("INSERT INTO winners (user_id, username, prize) VALUES (%s, %s, %s)", (wid, wname, PRIZE))
+                    conn.commit()
+        except: pass
+
+        # 2. Админу
+        await update.message.reply_text(
+            f"🎉 <b>ПОБЕДИТЕЛЬ:</b> @{wname or 'Нет ника'} (ID: <code>{wid}</code>)\n"
+            f"Билетов: {wtickets}\n"
+            f"✅ Сообщение отправляется...", 
+            parse_mode=ParseMode.HTML
+        )
+
+        # 3. Победителю
+        win_msg = (
+            f"🎉 <b>ПОЗДРАВЛЯЕМ! ВЫ ВЫИГРАЛИ!</b> 🎁\n\n"
+            f"В розыгрыше приза: <b>{PRIZE}</b>\n"
+            f"Удача улыбнулась именно вам! 🥳\n\n"
+            f"❗️ <b>ЧТО ДЕЛАТЬ ДАЛЬШЕ?</b>\n"
+            f"Свяжитесь с модератором для получения приза.\n"
+            f"👉 <b>Написать модератору:</b> @AddkatalogBot\n\n"
+            f"⏳ <b>Важно:</b> У вас есть ровно <b>48 часов</b>.\n"
+            f"<i>По истечении этого срока приз аннулируется!</i>"
+        )
+        try:
+            await context.bot.send_message(wid, win_msg, parse_mode=ParseMode.HTML)
+            await update.message.reply_text("✅ Доставлено победителю.")
+        except:
+            await update.message.reply_text("⚠️ Личка закрыта.")
+
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+async def stop_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS: return
+    global IS_ACTIVE
+    IS_ACTIVE = False
+    await update.message.reply_text("⛔️ <b>РОЗЫГРЫШ ОСТАНОВЛЕН!</b>\nРежим паузы активирован.", parse_mode=ParseMode.HTML)
+
+async def resume_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS: return
+    global IS_ACTIVE
+    IS_ACTIVE = True
+    await update.message.reply_text("▶️ <b>РОЗЫГРЫШ ВОЗОБНОВЛЕН!</b>", parse_mode=ParseMode.HTML)
+
+async def reset_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS: return
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET tickets = 0, ref_count = 0")
+                conn.commit()
+        await update.message.reply_text("✅ <b>Сезон сброшен!</b>", parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+def main():
+    init_db()
+    app = Application.builder().token(BOT_TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("draw", draw))
+    app.add_handler(CommandHandler("stop", stop_giveaway))
+    app.add_handler(CommandHandler("resume", resume_giveaway))
+    app.add_handler(CommandHandler("reset_season", reset_season))
+
+    print("Бот запущен...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
