@@ -17,26 +17,21 @@ def mask_username(username: str) -> str:
     return username[0] + "**" + username[-1]
 
 # --- Конфигурация ---
-# ! ВАЖНО: Если вы разворачиваете на Railway или аналогичной платформе,
-# ! БОТ ТОКЕН лучше хранить в переменной окружения Railway (Environment Variable) с именем BOT_TOKEN.
-# ! Тогда строчка BOT_TOKEN = os.getenv("BOT_TOKEN") автоматически его подхватит.
-# ! Если запускаете локально, то можно оставить как есть, но это менее безопасно для продакшена.
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGvd7NOy4kA98Gdn6ZVdgkIzAWtZjAgI8s") # Ваш токен, как в первом сообщении
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8576715226:AAGvd7NOy4kA98Gdn6ZVdgkIzAWtZjAgI8s") 
 
-SPONSORS = ["@openbusines", "@SAGkatalog", "@pro_teba_lubimyu"]  # Ваши каналы-спонсоры
-PRIZE = "🎁 Telegram Premium на 6 месяцев ИЛИ 1000 ⭐" # Обновленный приз
-ADMINS = [514167463]  # Ваши user_id админов (можно узнать через @getmyid_bot в Telegram)
+SPONSORS = ["@openbusines", "@SAGkatalog", "@pro_teba_lubimyu"]
+PRIZE = "🎁 Telegram Premium на 6 месяцев ИЛИ 1000 ⭐"
+ADMINS = [514167463]
 
-# ! ВАЖНО: ЗАМЕНИТЕ ЭТОТ ЮЗЕРНЕЙМ НА АКТУАЛЬНЫЙ ЮЗЕРНЕЙМ ВАШЕГО БОТА!
 BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot" 
 
 # --- Подключение к PostgreSQL ---
 def get_db_connection():
-    # ! ВАЖНО: MY_DATABASE_URL должен быть настроен как переменная окружения
-    # ! в вашей среде развертывания (например, Railway).
     DATABASE_URL = os.getenv("MY_DATABASE_URL")
     if not DATABASE_URL:
-        raise ValueError("MY_DATABASE_URL не установлен. Настройте его как переменную окружения (например, в Railway).")
+        # Для локального теста можно раскомментировать строку ниже, если есть URL
+        # return psycopg2.connect("postgres://...", sslmode='require')
+        raise ValueError("MY_DATABASE_URL не установлен.")
     return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 # --- Инициализация базы данных ---
@@ -307,22 +302,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    text = "<b>🏆 Лидерборд по билетам:</b>\n\n"
-    for i, row in enumerate(rows, 1):
-        username_from_db = row[0] or ""
-        masked = mask_username(username_from_db)
-        tickets = row[1]
-        text += f"{i}. <b>{masked}</b> — {tickets} билетов\n"
+        text = "<b>🏆 Лидерборд по билетам:</b>\n\n"
+        for i, row in enumerate(rows, 1):
+            username_from_db = row[0] or ""
+            masked = mask_username(username_from_db)
+            tickets = row[1]
+            text += f"{i}. <b>{masked}</b> — {tickets} билетов\n"
 
-    await query.edit_message_text(
-        text,
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
-        ])
-    )
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+            ])
+        )
 
-        elif query.data == "my_reflink":
+    # ВОТ ЗДЕСЬ БЫЛА ОШИБКА. ТЕПЕРЬ ОТСТУП ПРАВИЛЬНЫЙ (на одном уровне с другими elif):
+    elif query.data == "my_reflink":
         # Используем BOT_USERNAME_FOR_REFLINK
         link = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
         text = (
