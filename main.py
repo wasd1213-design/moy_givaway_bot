@@ -399,6 +399,36 @@ async def reset_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
+# --- НОВАЯ ФУНКЦИЯ СТАТИСТИКИ ---
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS: return
+    
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # 1. Всего людей в базе
+                cur.execute("SELECT COUNT(*) FROM users")
+                total_users = cur.fetchone()[0]
+                
+                # 2. Активные участники (подписаны + есть билеты)
+                cur.execute("SELECT COUNT(*) FROM users WHERE tickets > 0 AND all_subscribed = 1")
+                active_participants = cur.fetchone()[0]
+                
+                # 3. Общее количество билетов
+                cur.execute("SELECT SUM(tickets) FROM users")
+                total_tickets = cur.fetchone()[0] or 0
+
+        text = (
+            f"📊 <b>СТАТИСТИКА БОТА:</b>\n\n"
+            f"👥 <b>Всего пользователей:</b> {total_users}\n"
+            f"✅ <b>Активных участников:</b> {active_participants}\n"
+            f"🎫 <b>Всего билетов в игре:</b> {total_tickets}\n\n"
+            f"<i>Это ваши цифры для продажи рекламы!</i> 💰"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка получения статистики: {e}")
+
 def main():
     init_db()
     app = Application.builder().token(BOT_TOKEN).build()
@@ -411,7 +441,8 @@ def main():
     app.add_handler(CommandHandler("stop", stop_giveaway))
     app.add_handler(CommandHandler("resume", resume_giveaway))
     app.add_handler(CommandHandler("reset_season", reset_season))
-
+    app.add_handler(CommandHandler("stats", stats)) 
+    
     print("Бот запущен...")
     app.run_polling()
 
