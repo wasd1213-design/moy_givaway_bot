@@ -29,8 +29,7 @@ BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot"
 def get_db_connection():
     DATABASE_URL = os.getenv("MY_DATABASE_URL")
     if not DATABASE_URL:
-        # Для локального теста можно раскомментировать строку ниже, если есть URL
-        # return psycopg2.connect("postgres://...", sslmode='require')
+        # Если запускаете локально без переменной окружения, вставьте сюда строку подключения вручную
         raise ValueError("MY_DATABASE_URL не установлен.")
     return psycopg2.connect(DATABASE_URL, sslmode='require')
 
@@ -317,7 +316,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
 
-    # ВОТ ЗДЕСЬ БЫЛА ОШИБКА. ТЕПЕРЬ ОТСТУП ПРАВИЛЬНЫЙ (на одном уровне с другими elif):
+    # ВОТ ЗДЕСЬ ТЕПЕРЬ ВСЕ ПРАВИЛЬНО (НА ОДНОЙ ЛИНИИ С ДРУГИМИ ELIF)
     elif query.data == "my_reflink":
         # Используем BOT_USERNAME_FOR_REFLINK
         link = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
