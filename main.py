@@ -321,7 +321,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
         ])
     )
-        
+
     elif query.data == "my_reflink":
         # Используем BOT_USERNAME_FOR_REFLINK
         link = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
