@@ -11,9 +11,7 @@ from datetime import datetime
 
 # --- КОНФИГУРАЦИЯ ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
-# Спонсоры
 SPONSORS = ["@openbusines", "@SAGkatalog", "@pro_teba_lubimyu"]
-# Приз (ИЗМЕНЕНО НА 1000 ЗВЕЗД)
 PRIZE = "Telegram Premium на 6 месяцев или 1000 ⭐"
 ADMINS = [514167463]  
 BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot" 
@@ -152,10 +150,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = get_start_text(name)
     
+    # ВОТ ТУТ ВСЕ КНОПКИ
     kb = [
         [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
-        [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
+        [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],        # ВЕРНУЛИ
+        [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")], # ВЕРНУЛИ
         [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")]
     ]
     
@@ -203,6 +203,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
+    # ЛИДЕРБОРД (ВЕРНУЛИ ЛОГИКУ)
+    elif data == "leaderboard":
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT username, tickets FROM users WHERE tickets > 0 ORDER BY tickets DESC LIMIT 10")
+                    rows = cur.fetchall()
+            if not rows: res = "Пока пусто."
+            else:
+                res = "🏆 <b>ТОП-10 ПО БИЛЕТАМ:</b>\n\n"
+                for i, r in enumerate(rows, 1):
+                    res += f"{i}. {mask_username(r[0])} — {r[1]} 🎫\n"
+        except: res = "Ошибка."
+        kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
+        await query.edit_message_text(res, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+
+    # ПРОШЛЫЕ ПОБЕДИТЕЛИ
     elif data == "winners_list":
         try:
             with get_db_connection() as conn:
@@ -240,7 +257,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [
             [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
             [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
-            [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
+            [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],        # ВЕРНУЛИ
+            [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")], # ВЕРНУЛИ
             [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")]
         ]
         await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
@@ -273,7 +291,6 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Только подписанные и с билетами > 0
                 cur.execute("SELECT user_id, username, tickets FROM users WHERE tickets > 0 AND all_subscribed = 1")
                 rows = cur.fetchall()
         
