@@ -17,12 +17,14 @@ ADMINS = [514167463]
 BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot" 
 
 # ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ (Статус работы бота)
+# True = Работает, False = Технический перерыв
 IS_ACTIVE = True 
 
 # --- Подключение к БД ---
 def get_db_connection():
     DATABASE_URL = os.getenv("MY_DATABASE_URL")
     if not DATABASE_URL:
+        # Резервный адрес (локальный)
         return psycopg2.connect("postgresql://bot_user:12345@localhost/bot_db")
     return psycopg2.connect(DATABASE_URL)
 
@@ -49,7 +51,7 @@ def init_db():
                         UNIQUE(referrer_id, referred_id)
                     )
                 ''')
-                # Таблица победителей
+                # Таблица победителей (НОВАЯ)
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS winners (
                         id SERIAL PRIMARY KEY,
@@ -64,10 +66,11 @@ def init_db():
     except Exception as e:
         print(f"❌ Ошибка БД: {e}")
 
-# --- Функции ---
+# --- Вспомогательные функции ---
 def mask_username(username: str) -> str:
-    if not username: return "User"
-    if len(username) <= 2: return username + "*"
+    """Скрывает никнейм (Al**ex)"""
+    if not username: return "Us**er"
+    if len(username) <= 2: return username[0] + "**"
     return username[0] + "**" + username[-1]
 
 async def check_subscription(user_id, channel, context):
@@ -86,16 +89,16 @@ def calculate_tickets(user_id):
                 if not res: return 0
                 count, sub = res
                 if sub == 0: return 0
-                return min(10, count)
+                return min(10, count) # 1 друг = 1 билет (макс 10)
     except:
         return 0
 
-# --- СТАТУС ПОЛЬЗОВАТЕЛЯ (ГЛАВНОЕ МЕНЮ) ---
+# --- ГЛАВНОЕ МЕНЮ И СТАТУС ---
 async def build_status_message(user_id, first_name, context):
     subs = []
     unsubs = []
     
-    # Проверяем подписки
+    # Проверка подписок
     for ch in SPONSORS:
         if await check_subscription(user_id, ch, context):
             subs.append(f"✅ {ch}")
@@ -104,7 +107,7 @@ async def build_status_message(user_id, first_name, context):
     
     all_ok = (len(unsubs) == 0)
     
-    # Обновляем БД
+    # Обновление данных в БД
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
@@ -121,10 +124,10 @@ async def build_status_message(user_id, first_name, context):
                 cur.execute("UPDATE users SET tickets = %s WHERE user_id = %s", (tickets, user_id))
                 conn.commit()
     except Exception as e:
-        print(f"Error update user: {e}")
+        print(f"Error update: {e}")
         tickets = 0
 
-    # Если НЕ подписан - список каналов
+    # ЛОГИКА ОТОБРАЖЕНИЯ (Оригинальная)
     if not all_ok:
         msg = (
             "⚠️ <b>ВЫ НЕ УЧАСТВУЕТЕ!</b>\n\n"
@@ -133,32 +136,32 @@ async def build_status_message(user_id, first_name, context):
             "После подписки нажмите кнопку «🔄 Обновить статус»"
         )
     else:
-        # Если подписан - меню
         msg = (
             f"👋 Привет, {first_name}!\n\n"
             f"🎁 <b>Розыгрыш:</b> {PRIZE}\n\n"
             f"✅ Вы подписаны на все каналы!\n"
             f"🎫 Ваши билеты: <b>{tickets}</b> / 10\n"
-            f"👇 Получи ссылку ниже!"
+            f"👇 Жми кнопки ниже:"
         )
 
+    # КНОПКИ (С добавленной кнопкой победителей)
     kb = [
         [InlineKeyboardButton("🔗 Моя ссылка", callback_data="my_reflink")],
         [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
-        [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
+        [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")], 
         [InlineKeyboardButton("🔄 Обновить статус", callback_data="refresh_status")],
         [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],
-        [InlineKeyboardButton("📜 Условия розыгрыша", callback_data="rules")] 
+        [InlineKeyboardButton("📜 Условия розыгрыша", callback_data="rules")]
     ]
     return msg, InlineKeyboardMarkup(kb)
 
 # --- START ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1. ПРОВЕРКА НА ПАУЗУ
     if not IS_ACTIVE:
         pause_text = (
             "🏁 <b>РОЗЫГРЫШ ЗАВЕРШЕН!</b>\n\n"
             "Прямо сейчас мы подводим итоги и готовим новый сезон.\n"
-            "Список каналов временно скрыт.\n\n"
             "🔔 <i>Ожидайте уведомления о старте нового конкурса!</i>"
         )
         await update.message.reply_text(pause_text, parse_mode=ParseMode.HTML)
@@ -168,6 +171,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = user.id
     name = user.first_name
     
+    # Регистрация
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -175,6 +179,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.commit()
     except: pass
 
+    # Рефералка
     if context.args:
         ref_str = context.args[0]
         if ref_str.isdigit() and int(ref_str) != uid:
@@ -191,11 +196,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text, markup = await build_status_message(uid, name, context)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
-# --- КНОПКИ ---
+# --- ОБРАБОТЧИК КНОПОК ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    # 2. ПРОВЕРКА НА ПАУЗУ
     if not IS_ACTIVE:
         await query.edit_message_text("🏁 Розыгрыш завершен. Идет подготовка нового этапа.", parse_mode=ParseMode.HTML)
         return
@@ -222,6 +228,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
+    # --- СПИСОК ПОБЕДИТЕЛЕЙ (НОВОЕ) ---
     elif data == "winners_list":
         try:
             with get_db_connection() as conn:
@@ -237,7 +244,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     safe_name = mask_username(r[0])
                     date_str = r[1].strftime("%d.%m.%Y")
                     res += f"{i}. <b>{safe_name}</b> ({date_str})\n"
-        except: res = "Ошибка."
+        except: res = "Ошибка загрузки."
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(res, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
@@ -256,17 +263,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(res, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
-    # --- УСЛОВИЯ РОЗЫГРЫША (ОБНОВЛЕНО) ---
     elif data == "rules":
         text = (
             "📜 <b>Условия розыгрыша:</b>\n\n"
-            "1️⃣ <b>Подписка</b> на все каналы спонсоров обязательна.\n\n"
-            "2️⃣ <b>Приглашение друга обязательно!</b>\n"
-            "Чтобы получить свой первый билет, нужно пригласить хотя бы 1 человека.\n"
-            "<i>(1 друг = 1 билет)</i>\n\n"
-            "3️⃣ Чем больше друзей, тем выше шансы (макс 10 билетов).\n\n"
-            "4️⃣ Запрещена накрутка ботов.\n\n"
-            "5️⃣ Приз вручается в течение 48 часов."
+            "1. Подписка на спонсоров обязательна.\n"
+            "2. <b>Приглашение 1 друга обязательно</b> для получения билета.\n"
+            "3. Запрещена накрутка.\n"
+            "4. Приз вручается в течение 48 часов."
         )
         kb = [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
@@ -296,17 +299,17 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
+# --- ФУНКЦИЯ РОЗЫГРЫША (ОБНОВЛЕННАЯ) ---
 async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS: return
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Берем только тех, кто подписан И ИМЕЕТ БИЛЕТЫ (>0)
                 cur.execute("SELECT user_id, username, tickets FROM users WHERE tickets > 0 AND all_subscribed = 1")
                 rows = cur.fetchall()
         
         if not rows:
-            await update.message.reply_text("Нет участников (нужен минимум 1 билет).")
+            await update.message.reply_text("Нет участников.")
             return
 
         pool = []
@@ -316,6 +319,7 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
         winner = random.choice(pool)
         wid, wname, wtickets = winner
         
+        # 1. ЗАПИСЬ В БД
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
@@ -323,13 +327,16 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     conn.commit()
         except: pass
 
+        # 2. СООБЩЕНИЕ АДМИНУ
         await update.message.reply_text(
             f"🎉 <b>ПОБЕДИТЕЛЬ:</b> @{wname or 'Нет ника'} (ID: <code>{wid}</code>)\n"
             f"Билетов: {wtickets}\n"
-            f"✅ Отправляю сообщение...", 
+            f"✅ Записан в БД.\n"
+            f"📨 Отправляю сообщение в ЛС...", 
             parse_mode=ParseMode.HTML
         )
 
+        # 3. СООБЩЕНИЕ ПОБЕДИТЕЛЮ
         win_msg = (
             f"🎉 <b>ПОЗДРАВЛЯЕМ! ВЫ ВЫИГРАЛИ!</b> 🎁\n\n"
             f"В розыгрыше приза: <b>{PRIZE}</b>\n"
@@ -342,18 +349,19 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         try:
             await context.bot.send_message(wid, win_msg, parse_mode=ParseMode.HTML)
-            await update.message.reply_text("✅ Сообщение доставлено.")
+            await update.message.reply_text("✅ Сообщение доставлено победителю.")
         except:
-            await update.message.reply_text("⚠️ Не удалось написать победителю.")
+            await update.message.reply_text("⚠️ Не удалось написать победителю (ЛС закрыто).")
 
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
+# --- УПРАВЛЕНИЕ ПАУЗОЙ ---
 async def stop_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS: return
     global IS_ACTIVE
     IS_ACTIVE = False
-    await update.message.reply_text("⛔️ <b>РОЗЫГРЫШ ОСТАНОВЛЕН!</b>", parse_mode=ParseMode.HTML)
+    await update.message.reply_text("⛔️ <b>РОЗЫГРЫШ ОСТАНОВЛЕН!</b>\nТеперь бот пишет пользователям, что идет подсчет итогов.", parse_mode=ParseMode.HTML)
 
 async def resume_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS: return
@@ -368,7 +376,7 @@ async def reset_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("UPDATE users SET tickets = 0, ref_count = 0")
                 conn.commit()
-        await update.message.reply_text("✅ <b>Сезон сброшен!</b>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("✅ <b>Сезон сброшен!</b> Билеты = 0.", parse_mode=ParseMode.HTML)
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
