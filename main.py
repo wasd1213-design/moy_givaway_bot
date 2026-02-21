@@ -31,7 +31,7 @@ def get_db_connection():
     if not DATABASE_URL:
         # Если запускаете локально без переменной окружения, вставьте сюда строку подключения вручную
         raise ValueError("MY_DATABASE_URL не установлен.")
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+    return psycopg2.connect(DATABASE_URL)
 
 # --- Инициализация базы данных ---
 def init_db():
