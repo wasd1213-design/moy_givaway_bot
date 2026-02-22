@@ -368,7 +368,8 @@ async def stop_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     IS_ACTIVE = False
     await update.message.reply_text("⛔️ <b>Розыгрыш остановлен (ПАУЗА).</b>", parse_mode=ParseMode.HTML)
 
-async def resume_giveaway(update:S: return
+async def resume_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS: return
     global IS_ACTIVE
     IS_ACTIVE = True
     await update.message.reply_text("▶️ <b>Розыгрыш возобновлен.</b>", parse_mode=ParseMode.HTML)
