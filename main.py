@@ -11,7 +11,7 @@ from datetime import datetime
 
 # --- КОНФИГУРАЦИЯ ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
-SPONSORS = ["@openbusines", "@SAGkatalog", "@pro_teba_lubimyu"]
+SPONSORS = ["@sponsor1", "@sponsor2", "@sponsor3"]
 PRIZE = "Telegram Premium на 6 месяцев или 1000 ⭐"
 ADMINS = [514167463]  
 BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot" 
