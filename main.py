@@ -12,6 +12,8 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import MessageHandler, filters
 import json
 from datetime import datetime, timedelta
+import os
+print("MY_DATABASE_URL:", os.getenv("MY_DATABASE_URL"))
 
 # --- КОНФИГУРАЦИЯ ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
