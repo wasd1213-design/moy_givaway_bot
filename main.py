@@ -80,6 +80,15 @@ def mask_username(username: str) -> str:
     if len(username) <= 2: return username + "*"
     return username[0] + "**" + username[-1]
 
+def get_fortune_shortcut():
+    return ReplyKeyboardMarkup(
+        [[KeyboardButton(
+            "🎰 Колесо фортуны",
+            web_app=WebAppInfo(url="https://wasd1213-design.github.io/fortune-wheel-telegram/")
+        )]],
+        resize_keyboard=True
+    )
+
 async def check_subscription(user_id, channel, context):
     try:
         member = await context.bot.get_chat_member(chat_id=channel, user_id=user_id)
@@ -210,7 +219,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
 
     text = await get_start_text(uid, name, context)
-    
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_fortune_shortcut()
+    )
     kb = [
         [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
