@@ -9,6 +9,9 @@ from telegram.constants import ParseMode
 import random 
 from datetime import datetime
 from telegram import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from telegram.ext import MessageHandler, filters
+import json
+from datetime import datetime, timedelta
 
 # --- КОНФИГУРАЦИЯ ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
@@ -555,6 +558,40 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка получения статистики: {e}")
 
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    try:
+        # Мини-апп отправляет JSON, например {"spin":1}
+        data = json.loads(update.effective_message.web_app_data.data)
+        now = datetime.utcnow()
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT last_fortune_time FROM users WHERE user_id = %s", (user_id,))
+                res = cur.fetchone()
+                can_spin = True
+                wait_msg = ""
+                if res and res[0]:
+                    last_spin = res[0]
+                    delta = now - last_spin
+                    if delta < timedelta(hours=6):
+                        can_spin = False
+                        hours_left = 5 - delta.seconds // 3600
+                        mins_left = (3600 - (delta.seconds % 3600)) // 60
+                        wait_msg = f"Вы сможете крутить колесо через {hours_left} ч {mins_left} мин."
+                if can_spin:
+                    # Разрешено крутить — обновляем БД
+                    cur.execute("UPDATE users SET last_fortune_time = %s WHERE user_id = %s", (now, user_id))
+                    conn.commit()
+                    # Здесь ты вручную выдаешь приз — например, +2 билета (добавь свою механику)
+                    await update.effective_message.reply_text("Поздравляем! Можно крутить колесо!")
+                    # тут можешь выдать призы
+                else:
+                    await update.effective_message.reply_text(wait_msg)
+    except Exception as e:
+        await update.effective_message.reply_text("Ошибка: " + str(e))
+
 def main():
     init_db()
     app = Application.builder().token(BOT_TOKEN).build()
@@ -569,6 +606,7 @@ def main():
     app.add_handler(CommandHandler("reset_season", reset_season))
     app.add_handler(CommandHandler("stats", stats)) 
     app.add_handler(CommandHandler("fortune", fortune))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     
     print("Бот запущен...")
     app.run_polling()
