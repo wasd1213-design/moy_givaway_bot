@@ -8,6 +8,7 @@ import psycopg2
 from telegram.constants import ParseMode 
 import random 
 from datetime import datetime
+from telegram import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 # --- КОНФИГУРАЦИЯ ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
@@ -344,6 +345,20 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
+async def fortune(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [
+        [KeyboardButton(
+            "🎰 Колесо фортуны",
+            web_app=WebAppInfo(url="https://wasd1213-design.github.io/fortune-wheel-telegram/")
+        )],
+        [KeyboardButton("🔙 Назад")]
+    ]
+    markup = ReplyKeyboardMarkup(kb, resize_keyboard=True)
+    await update.message.reply_text(
+        "Жми на кнопку ниже и лови призы!",
+        reply_markup=markup
+    )
+
 async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
@@ -540,6 +555,7 @@ def main():
     app.add_handler(CommandHandler("resume", resume_giveaway))
     app.add_handler(CommandHandler("reset_season", reset_season))
     app.add_handler(CommandHandler("stats", stats)) 
+    app.add_handler(CommandHandler("fortune", fortune))
     
     print("Бот запущен...")
     app.run_polling()
