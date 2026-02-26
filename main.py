@@ -201,54 +201,58 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = user.id
     name = user.first_name
     
-    # Регистрация
+    # Регистрация пользователя в БД
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT DO NOTHING", (uid, name))
+                cur.execute(
+                    "INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT DO NOTHING", 
+                    (uid, name)
+                )
                 conn.commit()
-    except: pass
+    except Exception as e:
+        print(f"Ошибка регистрации: {e}")
 
-    # Рефералка
-if context.args:
-    ref_str = context.args[0]
-    if ref_str.isdigit() and int(ref_str) != uid:
-        referrer = int(ref_str)
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", 
-                        (referrer, uid)
-                    )
-                    if cur.rowcount > 0:
+    # 🔗 Рефералка (ОБЯЗАТЕЛЬНО внутри функции!)
+    if context.args:
+        ref_str = context.args[0]
+        if ref_str.isdigit() and int(ref_str) != uid:
+            referrer = int(ref_str)
+            try:
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
                         cur.execute(
-                            "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s", 
-                            (referrer,)
+                            "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", 
+                            (referrer, uid)
                         )
-                        conn.commit()  # ← Теперь на правильном уровне
-        except Exception as e:
-            # Лучше логировать ошибку, а не игнорировать
-            print(f"Ошибка рефералки: {e}")
-            # conn.rollback()  # можно добавить откат при ошибке
+                        if cur.rowcount > 0:
+                            cur.execute(
+                                "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s", 
+                                (referrer,)
+                            )
+                            conn.commit()
+            except Exception as e:
+                print(f"Ошибка рефералки: {e}")
 
-await update.message.reply_text(
-    "Открой мини-приложение 'Колесо фортуны' кнопкой ниже:",
-    reply_markup=ReplyKeyboardMarkup([
-        [KeyboardButton("Колесо фортуны", web_app=WebAppInfo(url="https://moygiveawaybot.ru/index.html"))]
-    ], resize_keyboard=True)
-)
+    # 🎡 Кнопка мини-приложения
+    await update.message.reply_text(
+        "Открой мини-приложение 'Колесо фортуны' кнопкой ниже:",
+        reply_markup=ReplyKeyboardMarkup([
+            [KeyboardButton("Колесо фортуны", web_app=WebAppInfo(url="https://moygiveawaybot.ru/index.html"))]
+        ], resize_keyboard=True)
+    )
 
-text = await get_start_text(uid, name, context)
-kb = [
-    [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
-    [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
-    [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],
-    [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
-    [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")]
-]
-await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
-
+    # 📋 Основное меню
+    text = await get_start_text(uid, name, context)
+    kb = [
+        [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
+        [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
+        [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],
+        [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
+        [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")]
+    ]
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
+    
 # --- КНОПКИ ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
