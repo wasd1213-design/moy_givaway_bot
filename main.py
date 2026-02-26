@@ -245,11 +245,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 📋 Основное меню
     text = await get_start_text(uid, name, context)
     kb = [
-        [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
+        [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
-        [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],
-        [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
-        [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")]
+        [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
+        [
+            InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard"), 
+            InlineKeyboardButton("🏅 Победители", callback_data="winners_list")
+        ]
     ]
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
     
@@ -269,12 +271,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Обновляю...")
         text = await get_start_text(uid, query.from_user.first_name, context)
         kb = [
-            [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
-            [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
-            [InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard")],
-            [InlineKeyboardButton("🏅 Прошлые победители", callback_data="winners_list")],
-            [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")]
+        [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")],
+        [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
+        [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
+        [
+            InlineKeyboardButton("🏆 Лидерборд", callback_data="leaderboard"), 
+            InlineKeyboardButton("🏅 Победители", callback_data="winners_list")
         ]
+    ]
         try:
             await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
         except: pass
