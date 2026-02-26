@@ -210,18 +210,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
 
     # Рефералка
-    if context.args:
-        ref_str = context.args[0]
-        if ref_str.isdigit() and int(ref_str) != uid:
-            referrer = int(ref_str)
-            try:
-                with get_db_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (referrer, uid))
-                        if cur.rowcount > 0:
-                           cur.execute("UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s", (referrer,))
-                            conn.commit()
-        except: pass
+if context.args:
+    ref_str = context.args[0]
+    if ref_str.isdigit() and int(ref_str) != uid:
+        referrer = int(ref_str)
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", 
+                        (referrer, uid)
+                    )
+                    if cur.rowcount > 0:
+                        cur.execute(
+                            "UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s", 
+                            (referrer,)
+                        )
+                        conn.commit()  # ← Теперь на правильном уровне
+        except Exception as e:
+            # Лучше логировать ошибку, а не игнорировать
+            print(f"Ошибка рефералки: {e}")
+            # conn.rollback()  # можно добавить откат при ошибке
 
 await update.message.reply_text(
     "Открой мини-приложение 'Колесо фортуны' кнопкой ниже:",
