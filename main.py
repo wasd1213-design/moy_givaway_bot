@@ -75,6 +75,19 @@ def init_db():
                     )
                 ''')
                 conn.commit()
+                        # --- НОВЫЕ КОЛОНКИ ДЛЯ КОЛЕСА ---
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN bonus_tickets INTEGER DEFAULT 0")
+                    conn.commit()
+                except: conn.rollback()
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN chance_multiplier REAL DEFAULT 0.0")
+                    conn.commit()
+                except: conn.rollback()
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN last_fortune_time TIMESTAMP")
+                    conn.commit()
+                except: conn.rollback()
         print("✅ База данных подключена.")
     except Exception as e:
         print(f"❌ Ошибка БД: {e}")
@@ -114,26 +127,24 @@ async def check_subscription(user_id, channel, context):
 
 # --- ВАЖНО: ФУНКЦИЯ СИНХРОНИЗАЦИИ БИЛЕТОВ ---
 # Она не просто считает, но и ЗАПИСЫВАЕТ результат в БД, чтобы Лидерборд видел актуальное число
+# --- ВАЖНО: ФУНКЦИЯ СИНХРОНИЗАЦИИ БИЛЕТОВ ---
 def sync_tickets(user_id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # 1. Получаем текущее кол-во рефералов и статус подписки
-                cur.execute("SELECT ref_count, all_subscribed FROM users WHERE user_id = %s", (user_id,))
+                # Получаем рефералов, статус подписки и БОНУСНЫЕ билеты с колеса
+                cur.execute("SELECT ref_count, all_subscribed, COALESCE(bonus_tickets, 0) FROM users WHERE user_id = %s", (user_id,))
                 res = cur.fetchone()
                 if not res: return 0
                 
-                ref_count, is_subscribed = res
+                ref_count, is_subscribed, bonus_tickets = res
                 
-                # 2. Логика подсчета:
-                # Если не подписан -> билетов 0 (временно заморожены)
-                # Если подписан -> 1 друг = 1 билет (макс 10)
                 if is_subscribed == 1:
-                    actual_tickets = min(10, ref_count)
+                    # Билеты за друзей (макс 10) + выигранные в Колесе
+                    actual_tickets = min(10, ref_count) + bonus_tickets
                 else:
                     actual_tickets = 0 
 
-                # 3. ОБНОВЛЯЕМ БД (чтобы лидерборд видел это число)
                 cur.execute("UPDATE users SET tickets = %s WHERE user_id = %s", (actual_tickets, user_id))
                 conn.commit()
                 
@@ -592,161 +603,77 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     now = datetime.utcnow()
-    today = now.date()
 
     try:
-        # Получаем данные из Колеса (чтобы понять, крутит он бесплатно или за билеты)
-        # Допустим, если юзер хочет сжечь билеты, веб-апп пришлет {"action": "buy_spin"}
         data_str = update.effective_message.web_app_data.data
-        action = ""
-        try:
-            parsed_data = json.loads(data_str)
-            action = parsed_data.get("action", "")
-        except: pass
+        parsed_data = json.loads(data_str)
+        
+        # Убеждаемся, что пришел результат прокрутки
+        if parsed_data.get("action") != "spin_result":
+            return
+
+        prize_code = parsed_data.get("prize")
+        prize_label = parsed_data.get("label")
 
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Достаем всю экономику юзера
+                # 1. Читаем данные профиля
                 cur.execute("""
-                    SELECT last_fortune_time, tickets, pity_counter, streak_days, last_spin_date, chance_multiplier 
+                    SELECT COALESCE(bonus_tickets, 0), COALESCE(chance_multiplier, 0.0), last_fortune_time 
                     FROM users WHERE user_id = %s
                 """, (user_id,))
                 res = cur.fetchone()
                 
                 if not res:
-                    await update.effective_message.reply_text("❌ Ошибка профиля.")
                     return
                 
-                last_spin_time, tickets, pity, streak, last_spin_date, multiplier = res
-                
-                # --- 1. ПРОВЕРКА КУЛДАУНА И "СГОРАНИЯ" БИЛЕТОВ ---
-                can_spin = True
-                wait_msg = ""
-                cost_tickets = 0
+                bonus_tickets, chance_multiplier, last_spin_time = res
 
+                # 2. ПРОВЕРКА КУЛДАУНА (Раз в 6 часов)
                 if last_spin_time:
                     delta = now - last_spin_time
                     if delta < timedelta(hours=6):
-                        if action == "buy_spin":
-                            # Механика Сгорания: юзер хочет крутить прямо сейчас за 2 билета
-                            if tickets >= 2:
-                                cost_tickets = 2
-                            else:
-                                can_spin = False
-                                wait_msg = "❌ У вас недостаточно билетов для платного прокрута (нужно 2 🎫)."
-                        else:
-                            can_spin = False
-                            h_left = 5 - delta.seconds // 3600
-                            m_left = (3600 - (delta.seconds % 3600)) // 60
-                            wait_msg = f"⏳ Колесо заряжается! Ждите {h_left}ч {m_left}м.\n\n🔥 *Не хотите ждать?* Нажмите кнопку ниже, чтобы покрутить сейчас за 2 билета!"
+                        h_left = 5 - delta.seconds // 3600
+                        m_left = (3600 - (delta.seconds % 3600)) // 60
+                        await update.effective_message.reply_text(f"⏳ Колесо заряжается! Ждите {h_left}ч {m_left}м.")
+                        return
 
-                if not can_spin:
-                    # Если не может крутить, предлагаем купить прокрут (если это не было ошибкой покупки)
-                    kb = []
-                    if "Колесо заряжается" in wait_msg:
-                        kb = [[KeyboardButton("🔥 Крутить за 2 билета", web_app=WebAppInfo(url="https://moygiveawaybot.ru/index.html?action=buy_spin"))]]
-                    
-                    markup = ReplyKeyboardMarkup(kb, resize_keyboard=True) if kb else None
-                    await update.effective_message.reply_text(wait_msg, reply_markup=markup, parse_mode=ParseMode.HTML)
-                    return
-
-                # --- 2. ЕЖЕДНЕВНЫЙ СТРИК (Streak) ---
-                is_golden_wheel = False
-                if last_spin_date == today:
-                    pass # Стрик не меняется, крутит в тот же день
-                elif last_spin_date == today - timedelta(days=1):
-                    streak += 1 # Подряд!
-                else:
-                    streak = 1 # Пропустил день, сброс
-                
-                if streak >= 7:
-                    is_golden_wheel = True
-                    streak = 0 # Сброс после Золотого колеса
-                    
-                # --- 3. МАТЕМАТИКА ПРИЗОВ И PITY TIMER (ГАРАНТ) ---
+                # 3. ЛОГИКА ПРИЗОВ
                 prize_text = ""
-                won_tickets = 0
-                won_multiplier = 0.0
-                
-                if is_golden_wheel:
-                    # ЗОЛОТОЕ КОЛЕСО (7-й день) - Пустых нет!
-                    choices = ["t_3", "t_5", "m_20", "m_50"]
-                    weights = [40, 30, 20, 10]
-                    pity = 0 # Сбрасываем гарант
-                elif pity >= 4:
-                    # СИСТЕМА ГАРАНТА (4 раза было пусто)
-                    choices = ["t_1", "t_2", "m_5", "m_10"]
-                    weights = [40, 30, 20, 10]
-                    pity = 0
-                    prize_text = "🛡 <b>Сработала система Гаранта!</b>\n\n"
-                else:
-                    # ОБЫЧНОЕ КОЛЕСО
-                    choices = ["empty", "t_1", "t_2", "m_5", "m_10", "m_25"]
-                    weights = [25, 30, 15, 15, 10, 5]
-                    
-                # Крутим рулетку на сервере
-                result = random.choices(choices, weights=weights, k=1)[0]
-                
-                # --- 4. РАСПРЕДЕЛЕНИЕ ПРИЗОВ ---
-                if result == "empty":
-                    pity += 1
-                    prize_text = "✨ В этот раз пусто...\nНо шкала Гаранта заполняется! Скоро точно повезет."
-                elif result == "t_1":
-                    won_tickets = 1
-                    pity = 0
-                    prize_text += "🎉 Поздравляем! Вы выиграли <b>+1 Билет</b>!"
-                elif result == "t_2":
-                    won_tickets = 2
-                    pity = 0
-                    prize_text += "🔥 Ого! Вы выиграли <b>+2 Билета</b>!"
-                elif result == "t_3":
-                    won_tickets = 3
-                    prize_text = "🌟 ЗОЛОТОЕ КОЛЕСО: Вы выиграли <b>+3 Билета</b>!"
-                elif result == "t_5":
-                    won_tickets = 5
-                    prize_text = "🌟 ЗОЛОТОЕ КОЛЕСО: Вы выиграли <b>+5 Билетов</b>!"
-                elif result == "m_5":
-                    won_multiplier = 0.05
-                    pity = 0
-                    prize_text += "📈 Бафф: <b>+5% к шансам на победу</b> в финале недели!"
-                elif result == "m_10":
-                    won_multiplier = 0.10
-                    pity = 0
-                    prize_text += "🚀 Бафф: <b>+10% к шансам на победу</b>!"
-                elif result == "m_20":
-                    won_multiplier = 0.20
-                    prize_text = "🌟 ЗОЛОТОЕ КОЛЕСО: <b>+20% к шансам на победу</b>!"
-                elif result == "m_25":
-                    won_multiplier = 0.25
-                    pity = 0
-                    prize_text += "🏆 ДЖЕКПОТ! <b>+25% к шансам на победу</b>!"
-                elif result == "m_50":
-                    won_multiplier = 0.50
-                    prize_text = "👑 МЕГА-ДЖЕКПОТ ЗОЛОТОГО КОЛЕСА: <b>+50% к шансам на победу</b>!"
+                if prize_code == "nothing":
+                    prize_text = "Увы, в этот раз сектор «Ничего»! 😢 Попробуй покрутить колесо позже."
+                elif prize_code == "ticket_1":
+                    bonus_tickets += 1
+                    prize_text = f"🎉 Поздравляем! Вы выиграли: <b>{prize_label}</b>!"
+                elif prize_code == "ticket_2":
+                    bonus_tickets += 2
+                    prize_text = f"🔥 Ого! Вы выиграли: <b>{prize_label}</b>!"
+                elif prize_code == "chance_5":
+                    chance_multiplier += 0.05
+                    prize_text = f"📈 Отлично! Твой шанс на победу увеличен: <b>{prize_label}</b>!"
+                elif prize_code == "chance_10":
+                    chance_multiplier += 0.10
+                    prize_text = f"🚀 Супер! Твой шанс на победу увеличен: <b>{prize_label}</b>!"
+                elif prize_code == "jackpot":
+                    chance_multiplier += 0.25
+                    prize_text = f"🏆 ДЖЕКПОТ! Невероятная удача! Ты получаешь: <b>{prize_label}</b>!"
 
-                # --- 5. ОБНОВЛЯЕМ БАЗУ ДАННЫХ ---
-                new_tickets = tickets - cost_tickets + won_tickets
-                new_multiplier = multiplier + won_multiplier
-                
+                # 4. СОХРАНЯЕМ В БАЗУ
                 cur.execute("""
                     UPDATE users 
-                    SET last_fortune_time = %s, tickets = %s, pity_counter = %s, 
-                        streak_days = %s, last_spin_date = %s, chance_multiplier = %s
+                    SET bonus_tickets = %s, chance_multiplier = %s, last_fortune_time = %s
                     WHERE user_id = %s
-                """, (now, new_tickets, pity, streak, today, new_multiplier, user_id))
-                
+                """, (bonus_tickets, chance_multiplier, now, user_id))
                 conn.commit()
-                
-                # --- 6. ОТПРАВЛЯЕМ ИТОГ ЮЗЕРУ ---
-                header = f"🔥 <b>Стрик: {streak} дн.</b> | 📈 <b>Множитель шансов: x{new_multiplier:.2f}</b>\n{'—'*20}\n"
-                
-                if cost_tickets > 0:
-                    header = f"💳 <i>Списано 2 билета за внеочередной прокрут.</i>\n\n" + header
-                    
-                await update.effective_message.reply_text(header + prize_text, parse_mode=ParseMode.HTML)
+
+                # Синхронизируем билеты, чтобы обновилось общее количество
+                sync_tickets(user_id)
+
+                # 5. ОТПРАВЛЯЕМ ИТОГ ЮЗЕРУ
+                await update.effective_message.reply_text(prize_text, parse_mode=ParseMode.HTML)
                 
     except Exception as e:
-        await update.effective_message.reply_text("❌ Ошибка обработки. Напишите админу.")
+        await update.effective_message.reply_text("❌ Ошибка обработки приза. Напишите админу.")
         print(f"Ошибка WebApp: {e}")
 
 def main():
