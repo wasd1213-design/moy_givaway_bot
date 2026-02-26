@@ -81,9 +81,20 @@ def init_db():
 
 # --- Вспомогательные функции ---
 def mask_username(username: str) -> str:
-    if not username: return "User"
-    if len(username) <= 2: return username + "*"
-    return username[0] + "**" + username[-1]
+    # 1. Если пользователь зарегистрировался без юзернейма
+    if not username: 
+        return "Без ника"
+    
+    # 2. Очищаем от знака @, если он случайно записался в базу
+    username = username.lstrip('@')
+    
+    # 3. Если ник короткий (например, 3 буквы: "bot")
+    if len(username) <= 3:
+        return f"@{username[:1]}***" # Получится @b***
+        
+    # 4. Для нормальных ников (оставляем 2 первые и 1 последнюю)
+    # Например: "alexander" -> "al" + "***" + "r" -> @al***r
+    return f"@{username[:2]}***{username[-1]}"
 
 def get_fortune_shortcut():
     return ReplyKeyboardMarkup(
