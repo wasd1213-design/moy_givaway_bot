@@ -100,7 +100,7 @@ def get_fortune_shortcut():
     return ReplyKeyboardMarkup(
         [[KeyboardButton(
             "🎰 Колесо фортуны",
-            web_app=WebAppInfo(url="https://wasd1213-design.github.io/fortune-wheel-telegram/")
+            web_app=WebAppInfo(url="https://moygiveawaybot.ru/index.html")
         )]],
         resize_keyboard=True
     )
@@ -396,7 +396,7 @@ async def fortune(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = [
         [KeyboardButton(
             "🎰 Колесо фортуны",
-            web_app=WebAppInfo(url="https://wasd1213-design.github.io/fortune-wheel-telegram/")
+            web_app=WebAppInfo(url="https://moygiveawaybot.ru/index.html")
         )],
         [KeyboardButton("🔙 Назад")]
     ]
