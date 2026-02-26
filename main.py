@@ -211,16 +211,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Рефералка
     if context.args:
-    ref_str = context.args[0]
-    if ref_str.isdigit() and int(ref_str) != uid:
-        referrer = int(ref_str)
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (referrer, uid))
-                    if cur.rowcount > 0:
-                        cur.execute("UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s", (referrer,))
-                        conn.commit()
+        ref_str = context.args[0]
+        if ref_str.isdigit() and int(ref_str) != uid:
+            referrer = int(ref_str)
+            try:
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (referrer, uid))
+                        if cur.rowcount > 0:
+                           cur.execute("UPDATE users SET ref_count = ref_count + 1 WHERE user_id = %s", (referrer,))
+                            conn.commit()
         except: pass
 
 await update.message.reply_text(
