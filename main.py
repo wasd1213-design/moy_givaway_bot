@@ -224,11 +224,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
 
     text = await get_start_text(uid, name, context)
-    await update.message.reply_text(
-        text,
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_fortune_shortcut()
-    )
     kb = [
         [InlineKeyboardButton("🎫 Мои билеты", callback_data="my_tickets")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
