@@ -109,11 +109,11 @@ def mask_username(username: str) -> str:
     # Например: "alexander" -> "al" + "***" + "r" -> @al***r
     return f"@{username[:2]}***{username[-1]}"
 
-def get_fortune_shortcut():
+def get_fortune_shortcut(user_id: int):
     return ReplyKeyboardMarkup(
         [[KeyboardButton(
-            "🎰 Колесо фортуны",
-            web_app=WebAppInfo(url="https://moygivawaybot.ru/index.html")
+            "🎡 Колесо фортуны",
+            web_app=WebAppInfo(url=f"https://moygivawaybot.ru/index.html?user_id={user_id}")
         )]],
         resize_keyboard=True
     )
@@ -260,7 +260,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Открой мини-приложение 'Колесо фортуны' кнопкой ниже:",
         reply_markup=ReplyKeyboardMarkup([
-            [KeyboardButton("Колесо фортуны", web_app=WebAppInfo(url="https://moygivawaybot.ru/index.html"))]
+            [KeyboardButton(
+    "Колесо фортуны",
+    web_app=WebAppInfo(url=f"https://moygivawaybot.ru/index.html?user_id={update.effective_user.id}")
+)]
         ], resize_keyboard=True)
     )
 
@@ -407,7 +410,7 @@ async def fortune(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = [
         [KeyboardButton(
             "🎰 Колесо фортуны",
-            web_app=WebAppInfo(url="https://moygivawaybot.ru/index.html")
+            web_app=WebAppInfo(url=f"https://moygivawaybot.ru/index.html?user_id={update.effective_user.id}")
         )],
         [KeyboardButton("🔙 Назад")]
     ]
