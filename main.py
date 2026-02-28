@@ -5,6 +5,7 @@ load_dotenv()
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import psycopg2
+from datetime import datetime, timedelta, timezone
 from telegram.constants import ParseMode 
 import random 
 from datetime import datetime
@@ -31,6 +32,63 @@ def get_db_connection():
     if not DATABASE_URL:
         return psycopg2.connect("postgresql://bot_user:12345@localhost/bot_db")
     return psycopg2.connect(DATABASE_URL)
+
+def utcnow():
+    return datetime.now(timezone.utc)
+
+def get_active_season():
+    """Возвращает (season_id, start_at, end_at). Создаёт новый сезон при необходимости."""
+    now = utcnow()
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, start_at, end_at
+                FROM seasons
+                WHERE end_at > %s
+                ORDER BY end_at ASC
+                LIMIT 1
+            """, (now,))
+            row = cur.fetchone()
+
+            if row:
+                return row[0], row[1], row[2]
+
+            start_at = now
+            end_at = now + timedelta(days=7)
+            cur.execute(
+                "INSERT INTO seasons (start_at, end_at) VALUES (%s, %s) RETURNING id",
+                (start_at, end_at)
+            )
+            season_id = cur.fetchone()[0]
+            conn.commit()
+            return season_id, start_at, end_at
+
+def ensure_user_season(user_id: int, season_id: int):
+    """
+    Если сезон у пользователя сменился/не задан — сбрасываем сезонное
+    и привязываем к текущему season_id.
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT season_id FROM users WHERE user_id=%s", (user_id,))
+            row = cur.fetchone()
+            if not row:
+                return
+
+            old_season_id = row[0]
+            if old_season_id != season_id:
+                cur.execute("""
+                    UPDATE users
+                    SET
+                      season_id = %s,
+                      tickets = 0,
+                      season_ref_tickets = 0,
+                      season_bonus_tickets = 0,
+                      chance_multiplier = 0,
+                      last_fortune_time = NULL
+                    WHERE user_id = %s
+                """, (season_id, user_id))
+                conn.commit()
 
 def init_db():
     try:
@@ -221,15 +279,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
     uid = user.id
-    name = user.first_name
+    first_name = user.first_name
+    username = user.username  # может быть None
     
     # Регистрация пользователя в БД
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT DO NOTHING", 
-                    (uid, name)
+                    "INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (uid, username)
                 )
                 conn.commit()
     except Exception as e:
