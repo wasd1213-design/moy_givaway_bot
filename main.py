@@ -696,11 +696,11 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         prize_code = parsed_data.get("prize")
 
         prize_to_tickets = {
-            "ticket_1": 1 билет,
-            "ticket_2": 2 билета,
-            "ticket_3": 3 билета,
-            "ticket_4": 4 билета,
-            "ticket_5": 5 билета,
+            "ticket_1": 1,
+            "ticket_2": 2,
+            "ticket_3": 3,
+            "ticket_4": 4,
+            "ticket_5": 5,
         }
 
         add_tickets = prize_to_tickets.get(prize_code, 0)
