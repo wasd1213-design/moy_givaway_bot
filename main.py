@@ -683,6 +683,7 @@ async def reset_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Колесо фортуны: обработка данных WebApp ---
+# --- Колесо фортуны: обработка данных WebApp ---
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     now = utcnow()
@@ -691,7 +692,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         data_str = update.effective_message.web_app_data.data
         parsed_data = json.loads(data_str)
 
-        # ожидаем {"action":"spin_result","prize":"ticket_3","label":"+3 билета"} и т.п.
+        # ожидаем {"action":"spin_result","prize":"ticket_3","label":"+3"} и т.п.
         if parsed_data.get("action") != "spin_result":
             return
 
@@ -701,24 +702,40 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         season_id, _, _ = get_active_season()
         ensure_user_season(user_id, season_id)
 
+        # 1) маппинг призов -> количество билетов
+        prize_to_tickets = {
+            "ticket_1": 1,
+            "ticket_2": 2,
+            "ticket_3": 3,
+            "ticket_4": 4,
+            "ticket_5": 5,
+        }
+
+        add_tickets = prize_to_tickets.get(prize_code, 0)
+
+        # 2) текст приза (НИКОГДА не пустой)
+        if prize_code == "nothing":
+            prize_text = "Увы, сектор «Ничего». Попробуй через 6 часов."
+        elif add_tickets > 0:
+            prize_text = f"🎉 Вы выиграли: <b>+{add_tickets} билет(ов)</b>!"
+        else:
+            prize_text = "❌ Неизвестный приз. Обновите колесо и попробуйте снова."
+
+        # 3) кулдаун + начисление
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # 1) читаем last_fortune_time + текущие tickets
                 cur.execute(
-                    """
-                    SELECT COALESCE(tickets,0), COALESCE(season_bonus_tickets,0), last_fortune_time
-                    FROM users
-                    WHERE user_id=%s
-                    """,
-                    (user_id,),
+                    "SELECT last_fortune_time FROM users WHERE user_id=%s",
+                    (user_id,)
                 )
                 row = cur.fetchone()
-                if not row:
-                    return
+                last_spin_time = row[0] if row else None
 
-                tickets, season_bonus_tickets, last_spin_time = row
+                # timezone-fix на всякий случай
+                if last_spin_time and last_spin_time.tzinfo is None:
+                    last_spin_time = last_spin_time.replace(tzinfo=timezone.utc)
 
-                # 2) кулдаун 6 часов (или покупка спина будет позже)
+                # 6 часов
                 if last_spin_time:
                     delta = now - last_spin_time
                     if delta < timedelta(hours=6):
@@ -727,61 +744,48 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         m_left = (seconds_left % 3600) // 60
                         await update.effective_message.reply_text(
                             f"⏳ Колесо заряжается! Ждите {h_left}ч {m_left}м.",
-                            parse_mode=ParseMode.HTML,
+                            parse_mode=ParseMode.HTML
                         )
                         return
 
-                # 3) призы (только билеты или nothing)
-                add_tickets = 0
-                if prize_code == "nothing":
-                    prize_text = "Увы, сектор «Ничего». Попробуй через 6 часов."
-                elif prize_code == "ticket_1":
-                    add_tickets = 1
-                elif prize_code == "ticket_2":
-                    add_tickets = 2
-                elif prize_code == "ticket_3":
-                    add_tickets = 3
-                elif prize_code == "ticket_4":
-                    add_tickets = 4
-                elif prize_code == "ticket_5":
-                    add_tickets = 5
-                else:
-                    prize_text = "Неизвестный приз."
-
-                # 4) сохраняем
                 if add_tickets > 0:
-                    prize_text = f"🎉 Вы выиграли: <b>+{add_tickets} билет(ов)</b>!"
                     cur.execute(
                         """
                         UPDATE users
-                        SET
-                          tickets = tickets + %s,
-                          season_bonus_tickets = season_bonus_tickets + %s,
-                          last_fortune_time = %s,
-                          season_id = %s
+                        SET tickets = COALESCE(tickets,0) + %s,
+                            season_bonus_tickets = COALESCE(season_bonus_tickets,0) + %s,
+                            last_fortune_time = %s,
+                            season_id = %s
                         WHERE user_id = %s
                         """,
-                        (add_tickets, add_tickets, now, season_id, user_id),
+                        (add_tickets, add_tickets, now, season_id, user_id)
                     )
                 else:
+                    # even for "nothing" ставим время, чтобы был кулдаун
                     cur.execute(
                         """
                         UPDATE users
-                        SET last_fortune_time=%s, season_id=%s
-                        WHERE user_id=%s
+                        SET last_fortune_time = %s,
+                            season_id = %s
+                        WHERE user_id = %s
                         """,
-                        (now, season_id, user_id),
+                        (now, season_id, user_id)
                     )
 
                 conn.commit()
+
+        # 4) ещё одна страховка от пустого текста
+        if not prize_text:
+            prize_text = "✅ Результат получен."
 
         await update.effective_message.reply_text(prize_text, parse_mode=ParseMode.HTML)
 
     except Exception as e:
         await update.effective_message.reply_text("❌ Ошибка обработки приза. Напишите админу.")
+        import traceback
         print("Ошибка WebApp:", e)
-
-
+        print(traceback.format_exc())
+        
 # --- DRAW (2 победителя) ---
 async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
