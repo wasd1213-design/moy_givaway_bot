@@ -287,8 +287,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                    (uid, username)
+                """
+                INSERT INTO users (user_id, username)
+                VALUES (%s, %s)
+                ON CONFLICT (user_id) DO UPDATE
+                SET username = EXCLUDED.username
+                """,
+                (uid, username)
                 )
                 conn.commit()
     except Exception as e:
@@ -327,7 +332,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # 📋 Основное меню
-    text = await get_start_text(uid, name, context)
+    text = await get_start_text(uid, first_name, context)
     kb = [
         [InlineKeyboardButton("🔄 Проверить подписку", callback_data="check_sub")],
         [InlineKeyboardButton("🔗 Моя реферальная ссылка", callback_data="my_reflink")],
