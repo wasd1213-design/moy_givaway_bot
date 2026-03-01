@@ -681,9 +681,7 @@ async def reset_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
-
-# --- Колесо фортуны: обработка данных WebApp ---
-# --- Колесо фортуны: обработка данных WebApp ---
+# --- Колесо фортуны: обработка данных WebApp (БЕЗ сезонов) ---
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     now = utcnow()
@@ -692,28 +690,21 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         data_str = update.effective_message.web_app_data.data
         parsed_data = json.loads(data_str)
 
-        # ожидаем {"action":"spin_result","prize":"ticket_3","label":"+3"} и т.п.
         if parsed_data.get("action") != "spin_result":
             return
 
         prize_code = parsed_data.get("prize")
 
-        # 0) сезон
-        season_id, _, _ = get_active_season()
-        ensure_user_season(user_id, season_id)
-
-        # 1) маппинг призов -> количество билетов
         prize_to_tickets = {
-            "ticket_1": 1,
-            "ticket_2": 2,
-            "ticket_3": 3,
-            "ticket_4": 4,
-            "ticket_5": 5,
+            "ticket_1": 1 билет,
+            "ticket_2": 2 билета,
+            "ticket_3": 3 билета,
+            "ticket_4": 4 билета,
+            "ticket_5": 5 билета,
         }
 
         add_tickets = prize_to_tickets.get(prize_code, 0)
 
-        # 2) текст приза (НИКОГДА не пустой)
         if prize_code == "nothing":
             prize_text = "Увы, сектор «Ничего». Попробуй через 6 часов."
         elif add_tickets > 0:
@@ -721,13 +712,13 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             prize_text = "❌ Неизвестный приз. Обновите колесо и попробуйте снова."
 
-        # 3) кулдаун + начисление
+        # защита от пустого текста
+        if not prize_text:
+            prize_text = "✅ Результат получен."
+
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT last_fortune_time FROM users WHERE user_id=%s",
-                    (user_id,)
-                )
+                cur.execute("SELECT last_fortune_time FROM users WHERE user_id=%s", (user_id,))
                 row = cur.fetchone()
                 last_spin_time = row[0] if row else None
 
@@ -735,7 +726,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if last_spin_time and last_spin_time.tzinfo is None:
                     last_spin_time = last_spin_time.replace(tzinfo=timezone.utc)
 
-                # 6 часов
+                # кулдаун 6 часов
                 if last_spin_time:
                     delta = now - last_spin_time
                     if delta < timedelta(hours=6):
@@ -748,35 +739,29 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         )
                         return
 
+                # начисление / фиксация времени
                 if add_tickets > 0:
                     cur.execute(
                         """
                         UPDATE users
                         SET tickets = COALESCE(tickets,0) + %s,
                             season_bonus_tickets = COALESCE(season_bonus_tickets,0) + %s,
-                            last_fortune_time = %s,
-                            season_id = %s
+                            last_fortune_time = %s
                         WHERE user_id = %s
                         """,
-                        (add_tickets, add_tickets, now, season_id, user_id)
+                        (add_tickets, add_tickets, now, user_id)
                     )
                 else:
-                    # even for "nothing" ставим время, чтобы был кулдаун
                     cur.execute(
                         """
                         UPDATE users
-                        SET last_fortune_time = %s,
-                            season_id = %s
+                        SET last_fortune_time = %s
                         WHERE user_id = %s
                         """,
-                        (now, season_id, user_id)
+                        (now, user_id)
                     )
 
                 conn.commit()
-
-        # 4) ещё одна страховка от пустого текста
-        if not prize_text:
-            prize_text = "✅ Результат получен."
 
         await update.effective_message.reply_text(prize_text, parse_mode=ParseMode.HTML)
 
