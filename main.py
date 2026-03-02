@@ -48,7 +48,7 @@ def get_db_connection():
 
 
 def utcnow():
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # --- СЕЗОНЫ ---
