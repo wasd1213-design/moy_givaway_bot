@@ -218,6 +218,28 @@ def init_db():
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id BIGINT PRIMARY KEY,
+                        username TEXT,
+                        first_name TEXT,
+                        referrer_id BIGINT NULL,
+                        activated BOOLEAN DEFAULT FALSE,
+                        all_subscribed INT DEFAULT 0,
+                        tickets INT DEFAULT 0,
+                        last_fortune_time TIMESTAMP NULL,
+                        lifetime_ref_count INT DEFAULT 0,
+                        weekly_hold_bonus_count INT DEFAULT 0,
+                        last_hold_bonus_at TIMESTAMP NULL,
+                        profile_badge BOOLEAN DEFAULT FALSE,
+                        last_level_notified TEXT DEFAULT 'Bronze',
+                        last_seen TIMESTAMP NULL,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS referrals (
                         referrer_id BIGINT,
                         referred_id BIGINT,
@@ -320,6 +342,10 @@ def init_db():
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_badge BOOLEAN DEFAULT FALSE",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_level_notified TEXT DEFAULT 'Bronze'",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP NULL",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS referrer_id BIGINT NULL",
                 ]
 
                 for stmt in alter_statements:
@@ -732,7 +758,6 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         "last_level_notified": last_level_notified,
     }
 
-
 async def notify_level_up_if_needed(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     try:
         state = await get_user_state(user_id, context)
@@ -814,13 +839,174 @@ async def get_start_text(user_id, first_name, context):
         f"🔄 <b>Статус колеса:</b> {cooldown_text}\n"
         f"💫 <b>Доп. вращение:</b> доступно за {EXTRA_SPIN_COST}⭐\n\n"
         f"📌 <b>Активные спонсоры:</b>\n{state['channels_list']}\n"
-        f"👥 <b>Активные рефералы:</b> {state[' WHERE user_id = %s
+        f"👥 <b>Активные рефералы:</b> {state['ref_count']}\n"
+    )
+
+
+async def process_weekly_hold_bonus(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    main_sponsors = await get_active_sponsors(include_temp=False)
+
+    if len(main_sponsors) < 2:
+        return False, "Основные спонсоры не настроены"
+
+    for sponsor in main_sponsors:
+        if not await check_subscription(user_id, sponsor["channel_username"], context):
+            return False, "Нет подписки на одного из основных спонсоров"
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(weekly_hold_bonus_count, 0),
+                    last_hold_bonus_at
+                FROM users
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return False, "Пользователь не найден"
+
+            weekly_count = int(row[0] or 0)
+            last_hold_bonus_at = to_naive_utc(row[1])
+
+            if weekly_count >= MAX_WEEKLY_HOLD_BONUSES:
+                return False, "Достигнут максимум недельных бонусов"
+
+            now = utcnow()
+            if last_hold_bonus_at and (now - last_hold_bonus_at) < timedelta(days=7):
+                return False, "Бонус уже начислялся меньше недели назад"
+
+            cur.execute(
+                """
+                UPDATE users
+                SET tickets = tickets + %s,
+                    weekly_hold_bonus_count = weekly_hold_bonus_count + 1,
+                    last_hold_bonus_at = %s
+                WHERE user_id = %s
                 """,
                 (WEEKLY_HOLD_BONUS, now, user_id),
             )
             conn.commit()
 
     return True, f"Начислено {WEEKLY_HOLD_BONUS} ⭐"
+
+
+async def show_profile(query_or_update, user_id: int, first_name: str, context: ContextTypes.DEFAULT_TYPE, edit=False):
+    state = await get_user_state(user_id, context)
+    me = query_or_update.from_user if hasattr(query_or_update, "from_user") else query_or_update.effective_user
+
+    reflink = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
+
+    badge_text = "🏅 Есть" if state["profile_badge"] else "—"
+
+    text = (
+        f"👤 <b>Профиль</b>\n\n"
+        f"Имя: <b>{first_name}</b>\n"
+        f"Username: <b>{display_username(me.username)}</b>\n"
+        f"ID: <code>{user_id}</code>\n\n"
+        f"⭐ Баланс: <b>{state['stars']}</b>\n"
+        f"🏅 Уровень: <b>{state['level']['emoji']} {state['level']['name']}</b>\n"
+        f"🌠 Бонус к колесу: <b>+{state['level']['bonus_percent']}%</b>\n"
+        f"🎁 Недельных бонусов получено: <b>{state['weekly_hold_bonus_count']}/{MAX_WEEKLY_HOLD_BONUSES}</b>\n"
+        f"Украшение профиля: <b>{badge_text}</b>\n\n"
+        f"👥 Активные рефералы: <b>{state['ref_count']}</b>\n"
+        f"🔗 Ваша реферальная ссылка:\n<code>{reflink}</code>"
+    )
+
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]])
+
+    if edit:
+        await query_or_update.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    else:
+        await query_or_update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+
+async def faq_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        FAQ_TEXT,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]),
+    )
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not IS_ACTIVE:
+        await update.message.reply_text("⛔️ Бот временно на паузе.")
+        return
+
+    user = update.effective_user
+    user_id = user.id
+    username = user.username
+    first_name = user.first_name or "друг"
+
+    referrer_id = None
+    if context.args:
+        try:
+            referrer_id = int(context.args[0])
+            if referrer_id == user_id:
+                referrer_id = None
+        except Exception:
+            referrer_id = None
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
+            exists = cur.fetchone()
+
+            if not exists:
+                cur.execute(
+                    """
+                    INSERT INTO users (user_id, username, first_name, referrer_id, tickets, last_seen)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, username, first_name, referrer_id, START_BONUS, utcnow()),
+                )
+
+                if referrer_id:
+                    cur.execute(
+                        """
+                        INSERT INTO referrals (referrer_id, referred_id, is_valid, checked_at)
+                        VALUES (%s, %s, FALSE, NULL)
+                        ON CONFLICT (referrer_id, referred_id) DO NOTHING
+                        """,
+                        (referrer_id, user_id),
+                    )
+            else:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET username = %s,
+                        first_name = %s,
+                        last_seen = %s
+                    WHERE user_id = %s
+                    """,
+                    (username, first_name, utcnow(), user_id),
+                )
+
+            conn.commit()
+
+    await count_valid_refs(user_id, context)
+
+    if referrer_id:
+        await count_valid_refs(referrer_id, context)
+        await notify_level_up_if_needed(referrer_id, context)
+
+    text = await get_start_text(user_id, first_name, context)
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_main_inline(),
+    )
+    await update.message.reply_text(
+        "Выберите действие из меню ниже 👇",
+        reply_markup=get_reply_menu(user_id),
+    )
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1054,7 +1240,189 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
                 ),
-           , o.counted_subscribers, o.active_subscribers
+            )
+
+        elif data == "exchange_badge":
+            state = await get_user_state(uid, context)
+
+            if state["profile_badge"]:
+                await query.edit_message_text(
+                    "ℹ️ <b>Украшение профиля уже активно.</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            if state["stars"] < PROFILE_BADGE_COST:
+                await query.edit_message_text(
+                    "❌ <b>Недостаточно звёзд</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET tickets = tickets - %s,
+                            profile_badge = TRUE
+                        WHERE user_id = %s
+                        RETURNING tickets
+                        """,
+                        (PROFILE_BADGE_COST, uid),
+                    )
+                    new_balance = int(cur.fetchone()[0])
+                    conn.commit()
+
+            await query.edit_message_text(
+                f"✅ <b>Украшение профиля активировано</b>\n\n💰 Остаток: <b>{new_balance}</b>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                ),
+            )
+
+        else:
+            await query.edit_message_text("Неизвестное действие.")
+    except Exception as e:
+        try:
+            await query.edit_message_text(f"Ошибка: {e}")
+        except Exception:
+            pass
+
+
+async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not IS_ACTIVE:
+        await update.message.reply_text("⛔️ Бот временно на паузе.")
+        return
+
+    text = update.message.text.strip()
+    user = update.effective_user
+    uid = user.id
+
+    waiting_order_id = context.user_data.get("waiting_sponsor_order_id")
+
+    if waiting_order_id:
+        channel_username = normalize_channel_username(text)
+
+        try:
+            member = await context.bot.get_chat_member(channel_username, context.bot.id)
+            if member.status not in ["administrator", "creator"]:
+                await update.message.reply_text("❌ Бот должен быть администратором указанного канала.")
+                return
+        except Exception:
+            await update.message.reply_text("❌ Не удалось проверить канал. Убедитесь, что username верный и бот добавлен в админы.")
+            return
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE sponsor_orders
+                    SET channel_username = %s,
+                        status = 'approved'
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (channel_username, waiting_order_id, uid),
+                )
+                conn.commit()
+
+        context.user_data.pop("waiting_sponsor_order_id", None)
+        await place_next_temp_order(context)
+
+        await update.message.reply_text(
+            f"✅ Канал {channel_username} сохранён.\nЗаявка одобрена и будет поставлена в очередь."
+        )
+        return
+
+    if text == "👤 Профиль":
+        await show_profile(update, uid, user.first_name or "друг", context)
+        return
+
+    if text == "📚 FAQ":
+        await update.message.reply_text(
+            FAQ_TEXT,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
+            ),
+        )
+        return
+
+    if text == "🔄 Обмен звёзд":
+        state = await get_user_state(uid, context)
+        await update.message.reply_text(
+            (
+                f"🔄 <b>Обмен звёзд</b>\n\n"
+                f"⭐ Ваш баланс: <b>{state['stars']}</b>\n\n"
+                f"Выберите нужное действие:"
+            ),
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_exchange_inline(),
+        )
+        return
+
+    if text == "🏆 Лидерборд":
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT first_name, username, COALESCE(tickets, 0) AS stars
+                        FROM users
+                        ORDER BY stars DESC, user_id ASC
+                        LIMIT 10
+                        """
+                    )
+                    rows = cur.fetchall()
+
+            if not rows:
+                await update.message.reply_text("Лидерборд пока пуст.")
+                return
+
+            msg = "🏆 <b>Лидерборд</b>\n\n"
+            for i, (first_name, username, stars) in enumerate(rows, 1):
+                name = first_name or display_username(username)
+                msg += f"{i}. <b>{name}</b> — {stars}⭐\n"
+
+            await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}")
+        return
+
+    if text == "🌠 Звёздное Колесо":
+        await update.message.reply_text(
+            "Откройте WebApp кнопкой в меню.",
+            reply_markup=get_reply_menu(uid),
+        )
+        return
+
+    await update.message.reply_text("Используйте кнопки меню.")
+
+async def sponsor_slots_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        s.slot_no,
+                        s.sponsor_type,
+                        s.channel_username,
+                        s.order_id,
+                        s.is_active,
+                        o.target_subscribers,
+                        o.counted_subscribers,
+                        o.active_subscribers
                     FROM sponsor_slots s
                     LEFT JOIN sponsor_orders o ON o.id = s.order_id
                     ORDER BY s.slot_no
@@ -1275,6 +1643,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка получения статистики: {e}")
 
+
 async def weekly_bonus_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
@@ -1322,6 +1691,9 @@ async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     init_db()
+
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN is not set")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
