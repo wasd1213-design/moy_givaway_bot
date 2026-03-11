@@ -156,11 +156,10 @@ def get_reply_menu(user_id: int):
 
 
 def get_main_inline():
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("🔄 Обновить статус", callback_data="check_sub")]
-        ]
-    )
+    """Только кнопка обновления для главного экрана"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Обновить статус", callback_data="check_sub")]
+    ])
 
 
 def get_exchange_inline():
@@ -1005,44 +1004,57 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_reply_menu(user_id),
     )
 
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     try:
         if not IS_ACTIVE:
             await query.edit_message_text("⛔️ Бот временно на паузе.", parse_mode=ParseMode.HTML)
             return
-
+        
         uid = query.from_user.id
         data = query.data
-
+        
         if data in ("check_sub", "back_to_main"):
             await count_valid_refs(uid, context)
             await recount_temp_order_progress(context)
             text = await get_start_text(uid, query.from_user.first_name, context)
-            await query.edit_message_text(
-                text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=get_main_inline(),
-            )
+            
+            # ОБРАБАТЫВАЕМ ОШИБКУ "NOT MODIFIED"
+            try:
+                await query.edit_message_text(
+                    text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_main_inline(),
+                )
+            except Exception as e:
+                if "not modified" in str(e).lower():
+                    # Игнорируем ошибку, если сообщение не изменилось
+                    pass
+                else:
+                    raise e
 
         elif data == "profile":
             await show_profile(query, uid, query.from_user.first_name, context, edit=True)
 
         elif data == "exchange":
-            state = await get_user_state(uid, context)
-            text = (
-                f"🔄 <b>Обмен звёзд</b>\n\n"
-                f"⭐ Ваш баланс: <b>{state['stars']}</b>\n\n"
-                f"Выберите нужное действие:"
-            )
-            await query.edit_message_text(
-                text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=get_exchange_inline(),
-            )
+    state = await get_user_state(uid, context)
+    text = (
+        f"🔄 <b>Обмен звёзд</b>\n"
+        f"⭐ Ваш баланс: <b>{state['stars']}</b>\n"
+        f"Выберите нужное действие:"
+    )
+    try:
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_exchange_inline(),
+        )
+    except Exception as e:
+        if "not modified" in str(e).lower():
+            pass
+        else:
+            raise e
 
         elif data == "exchange_premium":
             state = await get_user_state(uid, context)
@@ -1370,32 +1382,34 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ... (код для Обмена и Профиля оставляем как есть, там уже есть кнопки) ...
 
     if text == "🏆 Лидерборд":
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT first_name, username, COALESCE(tickets, 0) AS stars
-                        FROM users
-                        ORDER BY stars DESC, user_id ASC
-                        LIMIT 10
-                        """
-                    )
-                    rows = cur.fetchall()
-                    if not rows:
-                        await update.message.reply_text("Лидерборд пока пуст.")
-                        return
-                    msg = "🏆 <b>Лидерборд</b>\n"
-                    for i, (first_name, username, stars) in enumerate(rows, 1):
-                        name = first_name or display_username(username)
-                        msg += f"{i}. <b>{name}</b> — {stars}⭐\n"
-                    
-                    # ДОБАВЛЕНО: Кнопка Назад
-                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]])
-                    await update.message.reply_text(msg, parse_mode=ParseMode.HTML, reply_markup=keyboard)
-        except Exception as e:
-            await update.message.reply_text(f"Ошибка: {e}")
-        return
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT first_name, username, COALESCE(tickets, 0) AS stars
+                    FROM users
+                    ORDER BY stars DESC, user_id ASC
+                    LIMIT 10
+                    """
+                )
+                rows = cur.fetchall()
+                if not rows:
+                    await update.message.reply_text("Лидерборд пока пуст.")
+                    return
+                msg = "🏆 <b>Лидерборд</b>\n"
+                for i, (first_name, username, stars) in enumerate(rows, 1):
+                    name = first_name or display_username(username)
+                    msg += f"{i}. <b>{name}</b> — {stars}⭐\n"
+                
+                # ДОБАВЛЯЕМ КНОПКУ НАЗАД
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+                ])
+                await update.message.reply_text(msg, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+    return
 
     if text == "🌠 Звёздное Колесо":
         # ДОБАВЛЕНО: Кнопка Назад
