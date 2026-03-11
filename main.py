@@ -1038,23 +1038,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_profile(query, uid, query.from_user.first_name, context, edit=True)
 
         elif data == "exchange":
-    state = await get_user_state(uid, context)
-    text = (
-        f"🔄 <b>Обмен звёзд</b>\n"
-        f"⭐ Ваш баланс: <b>{state['stars']}</b>\n"
-        f"Выберите нужное действие:"
-    )
-    try:
-        await query.edit_message_text(
-            text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=get_exchange_inline(),
-        )
-    except Exception as e:
-        if "not modified" in str(e).lower():
-            pass
-        else:
-            raise e
+            state = await get_user_state(uid, context)
+            text = (
+                f"🔄 <b>Обмен звёзд</b>\n"
+                f"⭐ Ваш баланс: <b>{state['stars']}</b>\n"
+                f"Выберите нужное действие:"
+            )
+            try:
+                await query.edit_message_text(
+                    text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_exchange_inline(),
+                )
+            except Exception as e:
+                if "not modified" in str(e).lower():
+                    pass
+                else:
+                    raise e
 
         elif data == "exchange_premium":
             state = await get_user_state(uid, context)
