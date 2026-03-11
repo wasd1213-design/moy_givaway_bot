@@ -1,2 +1,2 @@
-# moy_givaway_bot
+# StarEarnTG_bot
 Telegram giveaway bot with referrals
