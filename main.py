@@ -1,0 +1,1745 @@
+import os
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+import psycopg2
+from dotenv import load_dotenv
+
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    WebAppInfo,
+)
+from telegram.constants import ParseMode
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
+
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+MY_DATABASE_URL = os.getenv("MY_DATABASE_URL")
+
+ADMINS = [514167463]
+BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot"
+WEBAPP_URL = "https://moygivawaybot.ru/index.html"
+
+IS_ACTIVE = True
+
+START_BONUS = 5
+WEEKLY_HOLD_BONUS = 10
+MAX_WEEKLY_HOLD_BONUSES = 4
+EXTRA_SPIN_COST = 1
+
+PREMIUM_COST = 1300
+WITHDRAW_MIN = 700
+CHANNEL_PROMO_COST = 200
+CHANNEL_PROMO_PRIORITY_COST = 400
+PROFILE_BADGE_COST = 20
+
+FAQ_CB = "faq"
+
+
+def get_db_connection():
+    if not MY_DATABASE_URL:
+        raise RuntimeError("MY_DATABASE_URL is not set")
+    return psycopg2.connect(MY_DATABASE_URL)
+
+
+def utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def to_naive_utc(dt):
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=None)
+
+
+def display_username(username: str) -> str:
+    if not username:
+        return "Без ника"
+    return f"@{username.lstrip('@')}"
+
+
+def normalize_channel_username(channel: str) -> str:
+    if not channel:
+        return ""
+    channel = channel.strip()
+    if channel.startswith("https://t.me/"):
+        channel = channel.replace("https://t.me/", "@")
+    if channel.startswith("http://t.me/"):
+        channel = channel.replace("http://t.me/", "@")
+    if not channel.startswith("@"):
+        channel = f"@{channel.lstrip('@')}"
+    return channel
+
+
+async def notify_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
+    for admin_id in ADMINS:
+        try:
+            await context.bot.send_message(admin_id, text, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            print("notify_admins error:", e)
+
+
+async def check_subscription(user_id, channel, context):
+    try:
+        member = await context.bot.get_chat_member(chat_id=channel, user_id=user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except Exception:
+        return False
+
+
+def get_level_info(ref_count: int):
+    if ref_count >= 15:
+        return {
+            "name": "VIP",
+            "emoji": "🌟",
+            "bonus_percent": 60,
+            "next_target": None,
+            "next_name": None,
+        }
+    if ref_count >= 10:
+        return {
+            "name": "Gold",
+            "emoji": "🥇",
+            "bonus_percent": 35,
+            "next_target": 15,
+            "next_name": "VIP",
+        }
+    if ref_count >= 5:
+        return {
+            "name": "Silver",
+            "emoji": "🥈",
+            "bonus_percent": 15,
+            "next_target": 10,
+            "next_name": "Gold",
+        }
+    return {
+        "name": "Bronze",
+        "emoji": "🥉",
+        "bonus_percent": 0,
+        "next_target": 5,
+        "next_name": "Silver",
+    }
+
+
+def get_reply_menu(user_id: int):
+    return ReplyKeyboardMarkup(
+        [
+            [
+                KeyboardButton(
+                    "🌠 Звёздное Колесо",
+                    web_app=WebAppInfo(url=f"{WEBAPP_URL}?user_id={user_id}"),
+                ),
+                KeyboardButton("👤 Профиль"),
+            ],
+            [
+                KeyboardButton("🔄 Обмен звёзд"),
+                KeyboardButton("🏆 Лидерборд"),
+            ],
+            [
+                KeyboardButton("📚 FAQ"),
+            ],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def get_main_inline():
+    """Только кнопка обновления для главного экрана"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Обновить статус", callback_data="check_sub")]
+    ])
+
+
+def get_exchange_inline():
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(f"💎 Telegram Premium 3 мес — {PREMIUM_COST} ⭐", callback_data="exchange_premium")],
+            [InlineKeyboardButton("💸 Вывод звёзд", callback_data="exchange_withdraw")],
+            [InlineKeyboardButton(f"📢 Ваш канал в списке спонсоров — {CHANNEL_PROMO_COST} ⭐", callback_data="exchange_promo")],
+            [InlineKeyboardButton(f"⚡ Вне очереди — {CHANNEL_PROMO_PRIORITY_COST} ⭐", callback_data="exchange_promo_priority")],
+            [InlineKeyboardButton(f"🏅 Украшение профиля — {PROFILE_BADGE_COST} ⭐", callback_data="exchange_badge")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")],
+        ]
+    )
+
+
+FAQ_TEXT = f"""
+📚 <b>FAQ — Звёздное Колесо</b>
+
+🌠 <b>Как получить доступ к Звёздному Колесу?</b>
+1. Подпишитесь на всех активных спонсоров
+2. Пригласите 2 активных реферала
+
+⚠️ <b>Важно:</b> еженедельный бонус за удержание подписки проверяется только по основным спонсорам.
+Временный пользовательский 3-й слот на недельный бонус не влияет.
+
+⭐ <b>Как получать звёзды?</b>
+• Бесплатно крутить Звёздное Колесо — 1 раз в 6 часов
+• Купить дополнительный спин за {EXTRA_SPIN_COST}⭐
+• Получать еженедельный бонус за сохранение подписки на основных спонсоров
+• Приглашать друзей и повышать уровень
+
+🎁 <b>Еженедельный бонус:</b>
+• Начисляется командой администратора /weekly_bonus
+• Учитываются только 2 основных спонсора
+• Размер бонуса: <b>{WEEKLY_HOLD_BONUS}⭐</b>
+• Максимум: <b>{MAX_WEEKLY_HOLD_BONUSES} недели</b>
+
+🔄 <b>Обмен звёзд:</b>
+• Telegram Premium 3 месяца — {PREMIUM_COST}⭐, только для VIP
+• Вывод звёзд — от {WITHDRAW_MIN}⭐, только для VIP
+• Ваш канал в списке спонсоров — {CHANNEL_PROMO_COST}⭐
+• Вне очереди — {CHANNEL_PROMO_PRIORITY_COST}⭐
+• Украшение профиля — {PROFILE_BADGE_COST}⭐
+
+❓ Поддержка: @moderatorgive_bot
+"""
+
+
+def init_db():
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id BIGINT PRIMARY KEY,
+                        username TEXT,
+                        first_name TEXT,
+                        referrer_id BIGINT NULL,
+                        activated BOOLEAN DEFAULT FALSE,
+                        all_subscribed INT DEFAULT 0,
+                        tickets INT DEFAULT 0,
+                        last_fortune_time TIMESTAMP NULL,
+                        lifetime_ref_count INT DEFAULT 0,
+                        weekly_hold_bonus_count INT DEFAULT 0,
+                        last_hold_bonus_at TIMESTAMP NULL,
+                        profile_badge BOOLEAN DEFAULT FALSE,
+                        last_level_notified TEXT DEFAULT 'Bronze',
+                        last_seen TIMESTAMP NULL,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS referrals (
+                        referrer_id BIGINT,
+                        referred_id BIGINT,
+                        is_valid BOOLEAN DEFAULT FALSE,
+                        checked_at TIMESTAMP NULL,
+                        UNIQUE(referrer_id, referred_id)
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS channel_subscriptions (
+                        user_id BIGINT,
+                        channel_id TEXT,
+                        subscribed_at TIMESTAMPTZ DEFAULT NOW(),
+                        PRIMARY KEY (user_id, channel_id)
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS fortune_spins (
+                        spin_id TEXT PRIMARY KEY,
+                        user_id BIGINT,
+                        prize_code TEXT,
+                        created_at TIMESTAMP
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS exchange_requests (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT,
+                        username TEXT,
+                        exchange_type TEXT,
+                        stars_amount INT,
+                        status TEXT DEFAULT 'new',
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS sponsor_slots (
+                        slot_no INT PRIMARY KEY,
+                        sponsor_type TEXT NOT NULL,
+                        channel_username TEXT,
+                        order_id INT NULL,
+                        is_active BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS sponsor_orders (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT,
+                        username TEXT,
+                        channel_username TEXT,
+                        target_subscribers INT DEFAULT 100,
+                        counted_subscribers INT DEFAULT 0,
+                        active_subscribers INT DEFAULT 0,
+                        priority_level INT DEFAULT 0,
+                        stars_amount INT NOT NULL,
+                        status TEXT DEFAULT 'waiting_link',
+                        placed_in_slot BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        completed_at TIMESTAMP NULL
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS sponsor_order_members (
+                        order_id INT NOT NULL,
+                        user_id BIGINT NOT NULL,
+                        counted_at TIMESTAMP DEFAULT NOW(),
+                        still_subscribed BOOLEAN DEFAULT TRUE,
+                        PRIMARY KEY (order_id, user_id)
+                    )
+                    """
+                )
+
+                alter_statements = [
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS activated BOOLEAN DEFAULT FALSE",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS all_subscribed INT DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS tickets INT DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_fortune_time TIMESTAMP NULL",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_ref_count INT DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_hold_bonus_count INT DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_hold_bonus_at TIMESTAMP NULL",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_badge BOOLEAN DEFAULT FALSE",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_level_notified TEXT DEFAULT 'Bronze'",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP NULL",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS referrer_id BIGINT NULL",
+                ]
+
+                for stmt in alter_statements:
+                    try:
+                        cursor.execute(stmt)
+                    except Exception as e:
+                        print("ALTER warning:", e)
+
+                cursor.execute(
+                    """
+                    INSERT INTO sponsor_slots (slot_no, sponsor_type, is_active)
+                    VALUES
+                        (1, 'main', FALSE),
+                        (2, 'main', FALSE),
+                        (3, 'temp', FALSE)
+                    ON CONFLICT (slot_no) DO NOTHING
+                    """
+                )
+
+                conn.commit()
+
+        print("✅ База данных подключена и инициализирована.")
+    except Exception as e:
+        print(f"❌ Ошибка БД: {e}")
+
+
+def get_active_sponsors_sync(include_temp=True):
+    sponsors = []
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            if include_temp:
+                cur.execute(
+                    """
+                    SELECT slot_no, sponsor_type, channel_username
+                    FROM sponsor_slots
+                    WHERE is_active = TRUE AND channel_username IS NOT NULL
+                    ORDER BY slot_no
+                    """
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT slot_no, sponsor_type, channel_username
+                    FROM sponsor_slots
+                    WHERE is_active = TRUE
+                      AND sponsor_type = 'main'
+                      AND channel_username IS NOT NULL
+                    ORDER BY slot_no
+                    """
+                )
+            rows = cur.fetchall()
+
+    for slot_no, sponsor_type, channel_username in rows:
+        sponsors.append(
+            {
+                "slot_no": slot_no,
+                "sponsor_type": sponsor_type,
+                "channel_username": channel_username,
+            }
+        )
+    return sponsors
+
+
+async def get_active_sponsors(include_temp=True):
+    return get_active_sponsors_sync(include_temp=include_temp)
+
+
+async def recount_temp_order_progress(context: ContextTypes.DEFAULT_TYPE):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT order_id, channel_username
+                    FROM sponsor_slots
+                    WHERE slot_no = 3
+                      AND is_active = TRUE
+                      AND order_id IS NOT NULL
+                      AND channel_username IS NOT NULL
+                    """
+                )
+                row = cur.fetchone()
+                if not row:
+                    return
+
+                order_id, channel_username = row
+
+                cur.execute("SELECT user_id FROM users")
+                users = [r[0] for r in cur.fetchall()]
+
+                for user_id in users:
+                    is_sub = await check_subscription(user_id, channel_username, context)
+                    if is_sub:
+                        cur.execute(
+                            """
+                            INSERT INTO sponsor_order_members (order_id, user_id, counted_at, still_subscribed)
+                            VALUES (%s, %s, %s, TRUE)
+                            ON CONFLICT (order_id, user_id)
+                            DO UPDATE SET still_subscribed = TRUE
+                            """,
+                            (order_id, user_id, utcnow()),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            UPDATE sponsor_order_members
+                            SET still_subscribed = FALSE
+                            WHERE order_id = %s AND user_id = %s
+                            """,
+                            (order_id, user_id),
+                        )
+
+                cur.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM sponsor_order_members
+                    WHERE order_id = %s
+                    """,
+                    (order_id,),
+                )
+                counted_total = int(cur.fetchone()[0] or 0)
+
+                cur.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM sponsor_order_members
+                    WHERE order_id = %s AND still_subscribed = TRUE
+                    """,
+                    (order_id,),
+                )
+                active_total = int(cur.fetchone()[0] or 0)
+
+                cur.execute(
+                    """
+                    UPDATE sponsor_orders
+                    SET counted_subscribers = %s,
+                        active_subscribers = %s
+                    WHERE id = %s
+                    RETURNING target_subscribers, user_id, channel_username
+                    """,
+                    (counted_total, active_total, order_id),
+                )
+                order_row = cur.fetchone()
+                if not order_row:
+                    conn.commit()
+                    return
+
+                target_subscribers, order_user_id, order_channel = order_row
+
+                if counted_total >= int(target_subscribers):
+                    cur.execute(
+                        """
+                        UPDATE sponsor_orders
+                        SET status = 'completed',
+                            completed_at = %s
+                        WHERE id = %s
+                        """,
+                        (utcnow(), order_id),
+                    )
+                    cur.execute(
+                        """
+                        UPDATE sponsor_slots
+                        SET channel_username = NULL,
+                            order_id = NULL,
+                            is_active = FALSE
+                        WHERE slot_no = 3
+                        """
+                    )
+                    conn.commit()
+
+                    await notify_admins(
+                        context,
+                        (
+                            f"✅ <b>Временный спонсорский заказ выполнен</b>\n\n"
+                            f"Заказ #{order_id}\n"
+                            f"Канал: <b>{order_channel}</b>\n"
+                            f"Привлечено: <b>{counted_total}/{target_subscribers}</b>"
+                        ),
+                    )
+
+                    try:
+                        await context.bot.send_message(
+                            chat_id=order_user_id,
+                            text=(
+                                f"✅ <b>Ваш заказ выполнен</b>\n\n"
+                                f"Канал: <b>{order_channel}</b>\n"
+                                f"Привлечено: <b>{counted_total}/{target_subscribers}</b>"
+                            ),
+                            parse_mode=ParseMode.HTML,
+                        )
+                    except Exception as e:
+                        print("notify order user error:", e)
+
+                    await place_next_temp_order(context)
+                    return
+
+                conn.commit()
+    except Exception as e:
+        print("recount_temp_order_progress error:", e)
+
+
+async def place_next_temp_order(context: ContextTypes.DEFAULT_TYPE):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT is_active FROM sponsor_slots WHERE slot_no = 3")
+                row = cur.fetchone()
+                if row and row[0]:
+                    return
+
+                cur.execute(
+                    """
+                    SELECT id, channel_username
+                    FROM sponsor_orders
+                    WHERE status = 'approved'
+                      AND placed_in_slot = FALSE
+                      AND channel_username IS NOT NULL
+                    ORDER BY priority_level DESC, created_at ASC
+                    LIMIT 1
+                    """
+                )
+                order = cur.fetchone()
+                if not order:
+                    return
+
+                order_id, channel_username = order
+
+                cur.execute(
+                    """
+                    UPDATE sponsor_slots
+                    SET channel_username = %s,
+                        order_id = %s,
+                        is_active = TRUE
+                    WHERE slot_no = 3
+                    """,
+                    (channel_username, order_id),
+                )
+
+                cur.execute(
+                    """
+                    UPDATE sponsor_orders
+                    SET placed_in_slot = TRUE,
+                        status = 'active'
+                    WHERE id = %s
+                    """,
+                    (order_id,),
+                )
+                conn.commit()
+
+                await notify_admins(
+                    context,
+                    (
+                        f"📢 <b>В слот 3 поставлен новый временный спонсор</b>\n\n"
+                        f"Заказ #{order_id}\n"
+                        f"Канал: <b>{channel_username}</b>"
+                    ),
+                )
+    except Exception as e:
+        print("place_next_temp_order error:", e)
+
+
+async def count_valid_refs(referrer_id: int, context: ContextTypes.DEFAULT_TYPE) -> int:
+    valid_count = 0
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT referred_id, COALESCE(is_valid, FALSE) FROM referrals WHERE referrer_id=%s",
+                (referrer_id,),
+            )
+            rows = cur.fetchall()
+
+            main_sponsors = await get_active_sponsors(include_temp=False)
+
+            for referred_id, is_valid in rows:
+                if is_valid:
+                    valid_count += 1
+                    continue
+
+                subscribed = False
+                for sponsor in main_sponsors:
+                    if await check_subscription(referred_id, sponsor["channel_username"], context):
+                        subscribed = True
+                        break
+
+                if subscribed:
+                    cur.execute(
+                        """
+                        UPDATE referrals
+                        SET is_valid = TRUE, checked_at = %s
+                        WHERE referrer_id = %s AND referred_id = %s
+                        """,
+                        (utcnow(), referrer_id, referred_id),
+                    )
+                    valid_count += 1
+
+            cur.execute(
+                "UPDATE users SET lifetime_ref_count = %s WHERE user_id = %s",
+                (valid_count, referrer_id),
+            )
+
+            if valid_count >= 2:
+                cur.execute(
+                    "UPDATE users SET activated = TRUE WHERE user_id = %s",
+                    (referrer_id,),
+                )
+
+            conn.commit()
+
+    return valid_count
+
+
+async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    sponsors = await get_active_sponsors(include_temp=True)
+
+    all_subs_ok = True
+    channels_list = ""
+
+    if not sponsors:
+        channels_list = "Список спонсоров пока не настроен.\n"
+        all_subs_ok = False
+
+    for i, sponsor in enumerate(sponsors, 1):
+        ch = sponsor["channel_username"]
+        is_sub = await check_subscription(user_id, ch, context)
+
+        if is_sub:
+            icon = "✅"
+            try:
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO channel_subscriptions (user_id, channel_id)
+                            VALUES (%s, %s)
+                            ON CONFLICT DO NOTHING
+                            """,
+                            (user_id, ch),
+                        )
+                        conn.commit()
+            except Exception as e:
+                print("channel_subscriptions save error:", e)
+        else:
+            icon = "❌"
+            all_subs_ok = False
+
+        slot_title = f"Слот {sponsor['slot_no']}"
+        if sponsor["sponsor_type"] == "main":
+            slot_title += " (основной)"
+        else:
+            slot_title += " (временный)"
+
+        channels_list += f"{i}. {ch} {icon} — {slot_title}\n"
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET all_subscribed = %s WHERE user_id = %s",
+                (1 if all_subs_ok else 0, user_id),
+            )
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(activated, FALSE),
+                    COALESCE(lifetime_ref_count, 0),
+                    COALESCE(tickets, 0),
+                    COALESCE(weekly_hold_bonus_count, 0),
+                    last_fortune_time,
+                    COALESCE(profile_badge, FALSE),
+                    COALESCE(last_level_notified, 'Bronze')
+                FROM users
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+            conn.commit()
+
+    activated = False
+    ref_count = 0
+    stars = 0
+    weekly_hold_bonus_count = 0
+    last_fortune_time = None
+    profile_badge = False
+    last_level_notified = "Bronze"
+
+    if row:
+        (
+            activated,
+            ref_count,
+            stars,
+            weekly_hold_bonus_count,
+            last_fortune_time,
+            profile_badge,
+            last_level_notified,
+        ) = row
+
+    level = get_level_info(ref_count)
+
+    return {
+        "activated": activated,
+        "all_subs_ok": all_subs_ok,
+        "channels_list": channels_list,
+        "ref_count": ref_count,
+        "stars": stars,
+        "weekly_hold_bonus_count": weekly_hold_bonus_count,
+        "last_fortune_time": to_naive_utc(last_fortune_time),
+        "profile_badge": profile_badge,
+        "level": level,
+        "last_level_notified": last_level_notified,
+    }
+
+async def notify_level_up_if_needed(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        state = await get_user_state(user_id, context)
+        current_level = state["level"]["name"]
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COALESCE(last_level_notified, 'Bronze') FROM users WHERE user_id = %s",
+                    (user_id,),
+                )
+                row = cur.fetchone()
+                prev_level = row[0] if row else "Bronze"
+
+                if prev_level != current_level:
+                    cur.execute(
+                        "UPDATE users SET last_level_notified = %s WHERE user_id = %s",
+                        (current_level, user_id),
+                    )
+                    conn.commit()
+
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            f"🎉 <b>Поздравляем!</b>\n\n"
+                            f"Ваш уровень повышен до <b>{state['level']['emoji']} {current_level}</b>\n"
+                            f"🌠 <b>Звёздное Колесо:</b> +{state['level']['bonus_percent']}%"
+                        ),
+                        parse_mode=ParseMode.HTML,
+                    )
+    except Exception as e:
+        print("notify_level_up_if_needed error:", e)
+
+
+async def get_start_text(user_id, first_name, context):
+    state = await get_user_state(user_id, context)
+
+    activation_text = (
+        "✅ <b>Доступ к колесу активирован</b>\n"
+        if state["activated"]
+        else "⚠️ <b>Для открытия колеса пригласите 2 активных реферала</b>\n"
+    )
+
+    if not state["all_subs_ok"]:
+        wheel_access = "❌ <b>Звёздное Колесо недоступно: подпишитесь на всех активных спонсоров</b>"
+    elif not state["activated"]:
+        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных рефералов</b>"
+    else:
+        wheel_access = "✅ <b>Звёздное Колесо доступно</b>"
+
+    if state["level"]["next_target"]:
+        left = max(0, state["level"]["next_target"] - state["ref_count"])
+        progress_text = (
+            f"📈 До уровня <b>{state['level']['next_name']}</b>: "
+            f"<b>{state['ref_count']}/{state['level']['next_target']}</b> "
+            f"(осталось {left})\n"
+        )
+    else:
+        progress_text = "👑 У вас максимальный уровень\n"
+
+    cooldown_text = "✅ Можно крутить прямо сейчас"
+    if state["last_fortune_time"]:
+        delta = utcnow() - state["last_fortune_time"]
+        if delta < timedelta(hours=6):
+            seconds_left = int(timedelta(hours=6).total_seconds() - delta.total_seconds())
+            h_left = seconds_left // 3600
+            m_left = (seconds_left % 3600) // 60
+            cooldown_text = f"⏳ До следующей бесплатной крутки: {h_left}ч {m_left}м"
+
+    return (
+        f"👋 <b>Привет, {first_name}!</b>\n\n"
+        f"🌠 <b>Добро пожаловать в Звёздное Колесо</b>\n\n"
+        f"{activation_text}"
+        f"{wheel_access}\n\n"
+        f"⭐ <b>Ваш баланс:</b> {state['stars']}\n"
+        f"🏅 <b>Ваш уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
+        f"🌠 <b>Звёздное Колесо:</b> +{state['level']['bonus_percent']}%\n"
+        f"{progress_text}\n"
+        f"🔄 <b>Статус колеса:</b> {cooldown_text}\n"
+        f"💫 <b>Доп. вращение:</b> доступно за {EXTRA_SPIN_COST}⭐\n\n"
+        f"📌 <b>Активные спонсоры:</b>\n{state['channels_list']}\n"
+        f"👥 <b>Активные рефералы:</b> {state['ref_count']}\n"
+    )
+
+
+async def process_weekly_hold_bonus(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    main_sponsors = await get_active_sponsors(include_temp=False)
+
+    if len(main_sponsors) < 2:
+        return False, "Основные спонсоры не настроены"
+
+    for sponsor in main_sponsors:
+        if not await check_subscription(user_id, sponsor["channel_username"], context):
+            return False, "Нет подписки на одного из основных спонсоров"
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(weekly_hold_bonus_count, 0),
+                    last_hold_bonus_at
+                FROM users
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return False, "Пользователь не найден"
+
+            weekly_count = int(row[0] or 0)
+            last_hold_bonus_at = to_naive_utc(row[1])
+
+            if weekly_count >= MAX_WEEKLY_HOLD_BONUSES:
+                return False, "Достигнут максимум недельных бонусов"
+
+            now = utcnow()
+            if last_hold_bonus_at and (now - last_hold_bonus_at) < timedelta(days=7):
+                return False, "Бонус уже начислялся меньше недели назад"
+
+            cur.execute(
+                """
+                UPDATE users
+                SET tickets = tickets + %s,
+                    weekly_hold_bonus_count = weekly_hold_bonus_count + 1,
+                    last_hold_bonus_at = %s
+                WHERE user_id = %s
+                """,
+                (WEEKLY_HOLD_BONUS, now, user_id),
+            )
+            conn.commit()
+
+    return True, f"Начислено {WEEKLY_HOLD_BONUS} ⭐"
+
+
+async def show_profile(query_or_update, user_id: int, first_name: str, context: ContextTypes.DEFAULT_TYPE, edit=False):
+    state = await get_user_state(user_id, context)
+    me = query_or_update.from_user if hasattr(query_or_update, "from_user") else query_or_update.effective_user
+
+    reflink = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
+
+    badge_text = "🏅 Есть" if state["profile_badge"] else "—"
+
+    text = (
+        f"👤 <b>Профиль</b>\n\n"
+        f"Имя: <b>{first_name}</b>\n"
+        f"Username: <b>{display_username(me.username)}</b>\n"
+        f"ID: <code>{user_id}</code>\n\n"
+        f"⭐ Баланс: <b>{state['stars']}</b>\n"
+        f"🏅 Уровень: <b>{state['level']['emoji']} {state['level']['name']}</b>\n"
+        f"🌠 Бонус к колесу: <b>+{state['level']['bonus_percent']}%</b>\n"
+        f"🎁 Недельных бонусов получено: <b>{state['weekly_hold_bonus_count']}/{MAX_WEEKLY_HOLD_BONUSES}</b>\n"
+        f"Украшение профиля: <b>{badge_text}</b>\n\n"
+        f"👥 Активные рефералы: <b>{state['ref_count']}</b>\n"
+        f"🔗 Ваша реферальная ссылка:\n<code>{reflink}</code>"
+    )
+
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]])
+
+    if edit:
+        await query_or_update.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    else:
+        await query_or_update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+
+async def faq_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        FAQ_TEXT,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]),
+    )
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not IS_ACTIVE:
+        await update.message.reply_text("⛔️ Бот временно на паузе.")
+        return
+
+    user = update.effective_user
+    user_id = user.id
+    username = user.username
+    first_name = user.first_name or "друг"
+
+    referrer_id = None
+    if context.args:
+        try:
+            referrer_id = int(context.args[0])
+            if referrer_id == user_id:
+                referrer_id = None
+        except Exception:
+            referrer_id = None
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
+            exists = cur.fetchone()
+
+            if not exists:
+                cur.execute(
+                    """
+                    INSERT INTO users (user_id, username, first_name, referrer_id, tickets, last_seen)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, username, first_name, referrer_id, START_BONUS, utcnow()),
+                )
+
+                if referrer_id:
+                    cur.execute(
+                        """
+                        INSERT INTO referrals (referrer_id, referred_id, is_valid, checked_at)
+                        VALUES (%s, %s, FALSE, NULL)
+                        ON CONFLICT (referrer_id, referred_id) DO NOTHING
+                        """,
+                        (referrer_id, user_id),
+                    )
+            else:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET username = %s,
+                        first_name = %s,
+                        last_seen = %s
+                    WHERE user_id = %s
+                    """,
+                    (username, first_name, utcnow(), user_id),
+                )
+
+            conn.commit()
+
+    await count_valid_refs(user_id, context)
+
+    if referrer_id:
+        await count_valid_refs(referrer_id, context)
+        await notify_level_up_if_needed(referrer_id, context)
+
+    text = await get_start_text(user_id, first_name, context)
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_main_inline(),
+    )
+    await update.message.reply_text(
+        "Выберите действие из меню ниже 👇",
+        reply_markup=get_reply_menu(user_id),
+    )
+
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        if not IS_ACTIVE:
+            await query.edit_message_text("⛔️ Бот временно на паузе.", parse_mode=ParseMode.HTML)
+            return
+
+        uid = query.from_user.id
+        data = query.data
+
+        if data in ("check_sub", "back_to_main"):
+            await count_valid_refs(uid, context)
+            await recount_temp_order_progress(context)
+            text = await get_start_text(uid, query.from_user.first_name, context)
+
+            try:
+                await query.edit_message_text(
+                    text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_main_inline(),
+                )
+            except Exception as e:
+                if "not modified" in str(e).lower():
+                    pass
+                else:
+                    raise e
+
+        elif data == "profile":
+            await show_profile(query, uid, query.from_user.first_name, context, edit=True)
+
+        elif data == "exchange":
+            state = await get_user_state(uid, context)
+            text = (
+                f"🔄 <b>Обмен звёзд</b>\n"
+                f"⭐ Ваш баланс: <b>{state['stars']}</b>\n"
+                f"Выберите нужное действие:"
+            )
+            try:
+                await query.edit_message_text(
+                    text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_exchange_inline(),
+                )
+            except Exception as e:
+                if "not modified" in str(e).lower():
+                    pass
+                else:
+                    raise e
+
+        elif data == "exchange_premium":
+            state = await get_user_state(uid, context)
+
+            if state["stars"] < PREMIUM_COST:
+                await query.edit_message_text(
+                    "❌ <b>Недостаточно звёзд</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            if state["level"]["name"] != "VIP":
+                await query.edit_message_text(
+                    "❌ <b>Доступно только для VIP-уровня Звёздного Колеса!</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE users SET tickets = tickets - %s WHERE user_id = %s RETURNING tickets",
+                        (PREMIUM_COST, uid),
+                    )
+                    new_balance = int(cur.fetchone()[0])
+
+                    cur.execute(
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (uid, query.from_user.username, "premium_3m", PREMIUM_COST),
+                    )
+                    conn.commit()
+
+            await notify_admins(
+                context,
+                (
+                    f"💎 <b>Новая заявка на Telegram Premium 3 мес</b>\n\n"
+                    f"👤 Пользователь: {display_username(query.from_user.username)}\n"
+                    f"🆔 ID: <code>{uid}</code>\n"
+                    f"⭐ Списано: <b>{PREMIUM_COST}</b>\n"
+                    f"💰 Остаток: <b>{new_balance}</b>"
+                ),
+            )
+
+            await query.edit_message_text(
+                "✅ Заявка на Telegram Premium создана. Администратор получил уведомление.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                ),
+            )
+
+        elif data == "exchange_withdraw":
+            state = await get_user_state(uid, context)
+
+            if state["stars"] < WITHDRAW_MIN:
+                await query.edit_message_text(
+                    f"❌ <b>Недостаточно звёзд</b>\nМинимум для вывода: <b>{WITHDRAW_MIN} ⭐</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            if state["level"]["name"] != "VIP":
+                await query.edit_message_text(
+                    "❌ <b>Доступно только для VIP-уровня Звёздного Колеса!</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE users SET tickets = tickets - %s WHERE user_id = %s RETURNING tickets",
+                        (WITHDRAW_MIN, uid),
+                    )
+                    new_balance = int(cur.fetchone()[0])
+
+                    cur.execute(
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (uid, query.from_user.username, "withdraw", WITHDRAW_MIN),
+                    )
+                    conn.commit()
+
+            await notify_admins(
+                context,
+                (
+                    f"💸 <b>Новая заявка на вывод звёзд</b>\n\n"
+                    f"👤 Пользователь: {display_username(query.from_user.username)}\n"
+                    f"🆔 ID: <code>{uid}</code>\n"
+                    f"⭐ Списано: <b>{WITHDRAW_MIN}</b>\n"
+                    f"💰 Остаток: <b>{new_balance}</b>"
+                ),
+            )
+
+            await query.edit_message_text(
+                "✅ Заявка на вывод создана. Администратор получил уведомление.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                ),
+            )
+
+        elif data in ("exchange_promo", "exchange_promo_priority"):
+            stars_cost = CHANNEL_PROMO_COST if data == "exchange_promo" else CHANNEL_PROMO_PRIORITY_COST
+            priority_level = 0 if data == "exchange_promo" else 1
+
+            state = await get_user_state(uid, context)
+            if state["stars"] < stars_cost:
+                await query.edit_message_text(
+                    "❌ <b>Недостаточно звёзд</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE users SET tickets = tickets - %s WHERE user_id = %s RETURNING tickets",
+                        (stars_cost, uid),
+                    )
+                    new_balance = int(cur.fetchone()[0])
+
+                    cur.execute(
+                        """
+                        INSERT INTO sponsor_orders (
+                            user_id, username, target_subscribers, counted_subscribers,
+                            active_subscribers, priority_level, stars_amount, status, placed_in_slot
+                        )
+                        VALUES (%s, %s, %s, 0, 0, %s, %s, 'waiting_link', FALSE)
+                        RETURNING id
+                        """,
+                        (uid, query.from_user.username, 100, priority_level, stars_cost),
+                    )
+                    order_id = int(cur.fetchone()[0])
+
+                    cur.execute(
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (
+                            uid,
+                            query.from_user.username,
+                            "sponsor_channel_priority" if priority_level == 1 else "sponsor_channel",
+                            stars_cost,
+                        ),
+                    )
+                    conn.commit()
+
+            context.user_data["waiting_sponsor_order_id"] = order_id
+
+            await notify_admins(
+                context,
+                (
+                    f"📢 <b>Новая заявка на размещение канала</b>\n\n"
+                    f"Заказ #{order_id}\n"
+                    f"👤 Пользователь: {display_username(query.from_user.username)}\n"
+                    f"🆔 ID: <code>{uid}</code>\n"
+                    f"⭐ Списано: <b>{stars_cost}</b>\n"
+                    f"💰 Остаток: <b>{new_balance}</b>\n"
+                    f"Тип: <b>{'вне очереди' if priority_level == 1 else 'обычный'}</b>\n\n"
+                    f"Пользователь должен прислать username канала."
+                ),
+            )
+
+            await query.edit_message_text(
+                "✅ Заявка создана.\n\n"
+                "Теперь отправьте <b>username канала</b> одним сообщением.\n"
+                "Пример: <code>@mychannel</code>\n\n"
+                "⚠️ Бот должен быть добавлен администратором в канал.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                ),
+            )
+
+        elif data == "exchange_badge":
+            state = await get_user_state(uid, context)
+
+            if state["profile_badge"]:
+                await query.edit_message_text(
+                    "ℹ️ <b>Украшение профиля уже активно.</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            if state["stars"] < PROFILE_BADGE_COST:
+                await query.edit_message_text(
+                    "❌ <b>Недостаточно звёзд</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET tickets = tickets - %s,
+                            profile_badge = TRUE
+                        WHERE user_id = %s
+                        RETURNING tickets
+                        """,
+                        (PROFILE_BADGE_COST, uid),
+                    )
+                    new_balance = int(cur.fetchone()[0])
+                    conn.commit()
+
+            await query.edit_message_text(
+                f"✅ <b>Украшение профиля активировано</b>\n\n💰 Остаток: <b>{new_balance}</b>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                ),
+            )
+
+        else:
+            await query.edit_message_text("Неизвестное действие.")
+
+    except Exception as e:
+        try:
+            await query.edit_message_text(f"Ошибка: {e}")
+        except Exception:
+            pass
+
+
+async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not IS_ACTIVE:
+        await update.message.reply_text("⛔️ Бот временно на паузе.")
+        return
+
+    text = update.message.text.strip()
+    user = update.effective_user
+    uid = user.id
+
+    waiting_order_id = context.user_data.get("waiting_sponsor_order_id")
+
+    if waiting_order_id:
+        channel_username = normalize_channel_username(text)
+
+        try:
+            member = await context.bot.get_chat_member(channel_username, context.bot.id)
+            if member.status not in ["administrator", "creator"]:
+                await update.message.reply_text("❌ Бот должен быть администратором указанного канала.")
+                return
+        except Exception:
+            await update.message.reply_text(
+                "❌ Не удалось проверить канал. Убедитесь, что username верный и бот добавлен в админы."
+            )
+            return
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE sponsor_orders
+                    SET channel_username = %s,
+                        status = 'approved'
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (channel_username, waiting_order_id, uid),
+                )
+                conn.commit()
+
+        context.user_data.pop("waiting_sponsor_order_id", None)
+        await place_next_temp_order(context)
+
+        await update.message.reply_text(
+            f"✅ Канал {channel_username} сохранён.\nЗаявка одобрена и будет поставлена в очередь."
+        )
+        return
+
+    if text == "👤 Профиль":
+        await show_profile(update, uid, user.first_name or "друг", context)
+        return
+
+    if text == "📚 FAQ":
+        await update.message.reply_text(
+            FAQ_TEXT,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
+            ),
+        )
+        return
+
+    if text == "🔄 Обмен звёзд":
+        state = await get_user_state(uid, context)
+        await update.message.reply_text(
+            (
+                f"🔄 <b>Обмен звёзд</b>\n\n"
+                f"⭐ Ваш баланс: <b>{state['stars']}</b>\n\n"
+                f"Выберите нужное действие:"
+            ),
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_exchange_inline(),
+        )
+        return
+
+    if text == "🏆 Лидерборд":
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT first_name, username, COALESCE(tickets, 0) AS stars
+                        FROM users
+                        ORDER BY stars DESC, user_id ASC
+                        LIMIT 10
+                        """
+                    )
+                    rows = cur.fetchall()
+
+            if not rows:
+                await update.message.reply_text("Лидерборд пока пуст.")
+                return
+
+            msg = "🏆 <b>Лидерборд</b>\n"
+            for i, (first_name, username, stars) in enumerate(rows, 1):
+                name = first_name or display_username(username)
+                msg += f"{i}. <b>{name}</b> — {stars}⭐\n"
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+            ])
+            await update.message.reply_text(
+                msg,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка: {e}")
+        return
+
+    if text == "🌠 Звёздное Колесо":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+        ])
+        await update.message.reply_text(
+            "Откройте WebApp кнопкой в меню ниже 👇",
+            reply_markup=keyboard,
+        )
+        return
+
+    await update.message.reply_text("Используйте кнопки меню.")
+
+
+async def sponsor_slots_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        s.slot_no,
+                        s.sponsor_type,
+                        s.channel_username,
+                        s.order_id,
+                        s.is_active,
+                        o.target_subscribers,
+                        o.counted_subscribers,
+                        o.active_subscribers
+                    FROM sponsor_slots s
+                    LEFT JOIN sponsor_orders o ON o.id = s.order_id
+                    ORDER BY s.slot_no
+                    """
+                )
+                rows = cur.fetchall()
+
+        text = "📢 <b>Слоты спонсоров</b>\n\n"
+        for row in rows:
+            slot_no, sponsor_type, channel_username, order_id, is_active, target, counted, active = row
+
+            if not is_active or not channel_username:
+                text += f"Слот {slot_no}: пусто\n\n"
+                continue
+
+            if sponsor_type == "main":
+                text += f"Слот {slot_no} (основной): {channel_username}\n\n"
+            else:
+                text += (
+                    f"Слот {slot_no} (временный): {channel_username}\n"
+                    f"Заказ #{order_id}\n"
+                    f"Привлечено: {counted or 0}/{target or 0}\n"
+                    f"Удержано: {active or 0}\n\n"
+                )
+
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+async def sponsor_queue_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, username, channel_username, priority_level, stars_amount, status, created_at
+                    FROM sponsor_orders
+                    WHERE status IN ('waiting_link', 'approved', 'active')
+                    ORDER BY
+                        CASE
+                            WHEN status = 'active' THEN 0
+                            WHEN status = 'approved' THEN 1
+                            ELSE 2
+                        END,
+                        priority_level DESC,
+                        created_at ASC
+                    """
+                )
+                rows = cur.fetchall()
+
+        if not rows:
+            await update.message.reply_text("Очередь пуста.")
+            return
+
+        text = "🗂 <b>Очередь / активные заказы</b>\n\n"
+        for row in rows:
+            order_id, username, channel_username, priority_level, stars_amount, status, created_at = row
+            text += (
+                f"#{order_id} | {display_username(username)}\n"
+                f"Канал: {channel_username or 'не указан'}\n"
+                f"Статус: {status}\n"
+                f"Приоритет: {'высокий' if priority_level == 1 else 'обычный'}\n"
+                f"Оплачено: {stars_amount}⭐\n\n"
+            )
+
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+async def set_main_sponsor_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    if len(context.args) < 2:
+        await update.message.reply_text("Использование: /set_main_sponsor <1|2> <@channel>")
+        return
+
+    try:
+        slot_no = int(context.args[0])
+        channel_username = normalize_channel_username(context.args[1])
+
+        if slot_no not in (1, 2):
+            await update.message.reply_text("Можно указать только слот 1 или 2.")
+            return
+
+        member = await context.bot.get_chat_member(channel_username, context.bot.id)
+        if member.status not in ["administrator", "creator"]:
+            await update.message.reply_text("Бот не является администратором этого канала.")
+            return
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE sponsor_slots
+                    SET channel_username = %s,
+                        is_active = TRUE,
+                        order_id = NULL
+                    WHERE slot_no = %s
+                    """,
+                    (channel_username, slot_no),
+                )
+                conn.commit()
+
+        await update.message.reply_text(
+            f"✅ Основной спонсор для слота {slot_no} установлен: {channel_username}"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+async def remove_temp_sponsor_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT order_id FROM sponsor_slots WHERE slot_no = 3")
+                row = cur.fetchone()
+                order_id = row[0] if row else None
+
+                if order_id:
+                    cur.execute(
+                        """
+                        UPDATE sponsor_orders
+                        SET status = 'completed',
+                            completed_at = %s
+                        WHERE id = %s
+                        """,
+                        (utcnow(), order_id),
+                    )
+
+                cur.execute(
+                    """
+                    UPDATE sponsor_slots
+                    SET channel_username = NULL,
+                        order_id = NULL,
+                        is_active = FALSE
+                    WHERE slot_no = 3
+                    """
+                )
+                conn.commit()
+
+        await update.message.reply_text("✅ Временный спонсор удалён из слота 3.")
+        await place_next_temp_order(context)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+async def check_sponsor_progress_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    await recount_temp_order_progress(context)
+    await update.message.reply_text("✅ Прогресс временного спонсора обновлён.")
+
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Введите текст.")
+        return
+
+    msg = " ".join(context.args)
+    await update.message.reply_text("⏳ Рассылка...")
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id FROM users")
+                users = cur.fetchall()
+
+        count = 0
+        for (uid,) in users:
+            try:
+                await context.bot.send_message(uid, msg)
+                count += 1
+                await asyncio.sleep(0.05)
+            except Exception:
+                pass
+
+        await update.message.reply_text(f"✅ Доставлено: {count}")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM users")
+                total_users = cur.fetchone()[0]
+
+                cur.execute("SELECT COALESCE(SUM(tickets), 0) FROM users")
+                total_stars = cur.fetchone()[0] or 0
+
+                cur.execute("SELECT COUNT(*) FROM users WHERE COALESCE(activated, FALSE) = TRUE")
+                activated_users = cur.fetchone()[0]
+
+        text = (
+            f"📊 <b>СТАТИСТИКА БОТА:</b>\n\n"
+            f"👥 <b>Всего пользователей:</b> {total_users}\n"
+            f"🚀 <b>Активировали колесо:</b> {activated_users}\n"
+            f"⭐ <b>Всего звёзд в системе:</b> {total_stars}\n"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка получения статистики: {e}")
+
+
+async def weekly_bonus_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    success_count = 0
+    skipped_count = 0
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id FROM users")
+                users = [row[0] for row in cur.fetchall()]
+
+        for user_id in users:
+            ok, _ = await process_weekly_hold_bonus(user_id, context)
+            if ok:
+                success_count += 1
+            else:
+                skipped_count += 1
+
+        await update.message.reply_text(
+            f"✅ Недельный бонус обработан.\n"
+            f"Начислено: {success_count}\n"
+            f"Пропущено: {skipped_count}"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка начисления бонусов: {e}")
+
+
+async def stop_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+    global IS_ACTIVE
+    IS_ACTIVE = False
+    await update.message.reply_text("⛔️ <b>ПАУЗА</b>", parse_mode=ParseMode.HTML)
+
+
+async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+    global IS_ACTIVE
+    IS_ACTIVE = True
+    await update.message.reply_text("▶️ <b>БОТ АКТИВЕН</b>", parse_mode=ParseMode.HTML)
+
+
+def main():
+    init_db()
+
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN is not set")
+
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("weekly_bonus", weekly_bonus_all))
+    app.add_handler(CommandHandler("stop", stop_bot))
+    app.add_handler(CommandHandler("resume", resume_bot))
+
+    app.add_handler(CommandHandler("sponsor_slots", sponsor_slots_cmd))
+    app.add_handler(CommandHandler("sponsor_queue", sponsor_queue_cmd))
+    app.add_handler(CommandHandler("set_main_sponsor", set_main_sponsor_cmd))
+    app.add_handler(CommandHandler("remove_temp_sponsor", remove_temp_sponsor_cmd))
+    app.add_handler(CommandHandler("check_sponsor_progress", check_sponsor_progress_cmd))
+
+    app.add_handler(CallbackQueryHandler(faq_callback, pattern="^faq$"))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_menu_handler))
+
+    print("Бот запущен...")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,10 @@
+venv/
+myenv/
+__pycache__/
+*.pyc
+.env
+*.log
+nohup.out
+*.bak
+*.backup*
+*.save

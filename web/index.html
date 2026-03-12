@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Звёздное Колесо</title>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #1f2340 0%, #121526 45%, #0b0d18 100%);
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 420px;
+      padding: 16px 14px 30px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 16px 0 8px;
+      font-size: 28px;
+      font-weight: 800;
+      color: #ffd54f;
+      text-shadow: 0 0 10px rgba(255, 213, 79, 0.25);
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #cfd8ff;
+      margin-bottom: 14px;
+    }
+
+    .info-card {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.22);
+      text-align: left;
+    }
+
+    .info-line {
+      font-size: 15px;
+      margin: 6px 0;
+      color: #f5f7ff;
+    }
+
+    .wheel-container {
+      position: relative;
+      width: 310px;
+      height: 310px;
+      margin: 10px auto 0;
+    }
+
+    .pointer {
+      position: absolute;
+      top: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 16px solid transparent;
+      border-right: 16px solid transparent;
+      border-top: 32px solid #ff4d8d;
+      z-index: 5;
+      filter: drop-shadow(0px 3px 4px rgba(0, 0, 0, 0.55));
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      box-shadow:
+        0 0 22px rgba(0, 0, 0, 0.45),
+        0 0 0 6px #242a45,
+        0 0 30px rgba(103, 58, 183, 0.18);
+      transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+      background: #111522;
+    }
+
+    .spin-btn {
+      margin-top: 28px;
+      padding: 15px 30px;
+      font-size: 18px;
+      font-weight: 800;
+      color: white;
+      background: linear-gradient(45deg, #7c4dff, #ff4081);
+      border: none;
+      border-radius: 28px;
+      box-shadow: 0 6px 18px rgba(124, 77, 255, 0.35);
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s, opacity 0.2s;
+      width: 100%;
+      max-width: 290px;
+    }
+
+    .spin-btn:active {
+      transform: scale(0.97);
+    }
+
+    .spin-btn:disabled {
+      background: #555b72;
+      color: #aaa;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    .status-box {
+      margin-top: 14px;
+      font-size: 14px;
+      color: #dfe6ff;
+      min-height: 40px;
+      line-height: 1.45;
+    }
+
+    .level-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 213, 79, 0.12);
+      color: #ffd54f;
+      font-size: 14px;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #bfc7e8;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌠 Звёздное Колесо</h1>
+    <div class="subtitle">Крути, собирай звёзды и повышай уровень</div>
+
+    <div class="info-card">
+      <div class="info-line" id="starsLine">⭐ Баланс: —</div>
+      <div class="info-line" id="levelLine">🏅 Уровень: —</div>
+      <div class="info-line" id="wheelBonusLine">🌠 Звёздное Колесо: —</div>
+      <div class="info-line" id="statusLine">🔄 Статус: проверка...</div>
+      <div class="level-badge" id="levelBadge">Загрузка...</div>
+    </div>
+
+    <div class="wheel-container">
+      <div class="pointer"></div>
+      <canvas id="wheel" width="400" height="400"></canvas>
+    </div>
+
+    <button id="spinBtn" class="spin-btn">КРУТИТЬ ЗВЁЗДНОЕ КОЛЕСО</button>
+
+    <div class="status-box" id="statusBox">Проверяем доступ...</div>
+    <div class="small">Бесплатно раз в 6 часов или сразу за 1⭐</div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) tg.expand();
+
+    const params = new URLSearchParams(window.location.search);
+    const userIdFromUrl = params.get("user_id");
+    const userId = userIdFromUrl ? Number(userIdFromUrl) : tg?.initDataUnsafe?.user?.id;
+
+    const canvas = document.getElementById("wheel");
+    const ctx = canvas.getContext("2d");
+    const spinBtn = document.getElementById("spinBtn");
+
+    const starsLine = document.getElementById("starsLine");
+    const levelLine = document.getElementById("levelLine");
+    const wheelBonusLine = document.getElementById("wheelBonusLine");
+    const statusLine = document.getElementById("statusLine");
+    const levelBadge = document.getElementById("levelBadge");
+    const statusBox = document.getElementById("statusBox");
+
+    const sectors = [
+      { label: "Ничего", color: "#6c757d", code: "nothing" },
+      { label: "+1 ⭐", color: "#43a047", code: "star_1" },
+      { label: "+2 ⭐", color: "#1e88e5", code: "star_2" },
+      { label: "+3 ⭐", color: "#00acc1", code: "star_3" },
+      { label: "+4 ⭐", color: "#8e24aa", code: "star_4" },
+      { label: "+5 ⭐", color: "#fdd835", code: "star_5" }
+    ];
+
+    const levelMeta = {
+      Bronze: { emoji: "🥉", bonus: "+0%" },
+      Silver: { emoji: "🥈", bonus: "+15%" },
+      Gold:   { emoji: "🥇", bonus: "+35%" },
+      VIP:    { emoji: "🌟", bonus: "+60%" }
+    };
+
+    const numSectors = sectors.length;
+    const arc = (2 * Math.PI) / numSectors;
+    let currentRotation = 0;
+
+    async function apiIsCanSpin() {
+      const r = await fetch(`/api/is_can_spin?user_id=${userId}`);
+      return await r.json();
+    }
+
+    async function apiBuySpin() {
+      const r = await fetch(`/api/buy_spin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId })
+      });
+      return await r.json();
+    }
+
+    async function apiSpin() {
+      const r = await fetch(`/api/spin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId })
+      });
+      return await r.json();
+    }
+
+    function drawWheel() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = centerX;
+
+      for (let i = 0; i < numSectors; i++) {
+        const angle = i * arc;
+
+        ctx.beginPath();
+        ctx.fillStyle = sectors[i].color;
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, angle, angle + arc);
+        ctx.lineTo(centerX, centerY);
+        ctx.fill();
+
+        ctx.strokeStyle = "#101525";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(angle + arc / 2);
+        ctx.textAlign = "right";
+        ctx.font = "bold 22px sans-serif";
+        ctx.fillStyle = sectors[i].color === "#fdd835" ? "#000" : "#fff";
+        ctx.fillText(sectors[i].label, radius - 25, 10);
+        ctx.restore();
+      }
+    }
+
+    function showResultPopup(title, message) {
+      if (tg?.showPopup) {
+        tg.showPopup({
+          title,
+          message,
+          buttons: [{ type: "ok" }]
+        });
+      } else {
+        alert(`${title}\n\n${message}`);
+      }
+    }
+
+    function updateInfo(check) {
+      const level = check.level || "Bronze";
+      const meta = levelMeta[level] || levelMeta.Bronze;
+
+      starsLine.textContent = `⭐ Баланс: ${check.stars ?? "—"}`;
+      levelLine.textContent = `🏅 Уровень: ${meta.emoji} ${level}`;
+      wheelBonusLine.textContent = `🌠 Звёздное Колесо: ${meta.bonus}`;
+      levelBadge.textContent = `${meta.emoji} ${level}`;
+
+      if (check.can_spin) {
+        statusLine.textContent = "🔄 Статус: можно крутить";
+        statusBox.textContent = "Колесо готово к вращению!";
+        spinBtn.disabled = false;
+      } else {
+        if (check.reason === "not_subscribed") {
+          statusLine.textContent = "🔄 Статус: нет подписки";
+          statusBox.textContent = check.message || "Подпишитесь на всех активных спонсоров.";
+          spinBtn.disabled = true;
+        } else if (check.reason === "not_activated") {
+          statusLine.textContent = "🔄 Статус: нет доступа";
+          statusBox.textContent = check.message || "Пригласите 2 активных реферала.";
+          spinBtn.disabled = true;
+        } else if (check.reason === "cooldown") {
+          statusLine.textContent = "🔄 Статус: перезарядка";
+          statusBox.textContent = check.wait_msg || "Подождите до следующего вращения.";
+          spinBtn.disabled = false;
+        } else {
+          statusLine.textContent = "🔄 Статус: недоступно";
+          statusBox.textContent = check.message || "Сейчас вращение недоступно.";
+          spinBtn.disabled = true;
+        }
+      }
+    }
+
+    async function refreshState() {
+      if (!userId) {
+        statusBox.textContent = "Не удалось определить user_id. Откройте колесо из Telegram-бота.";
+        spinBtn.disabled = true;
+        return;
+      }
+
+      try {
+        const check = await apiIsCanSpin();
+        if (!check.ok) {
+          statusBox.textContent = "Ошибка загрузки статуса.";
+          spinBtn.disabled = true;
+          return;
+        }
+        updateInfo(check);
+      } catch (e) {
+        statusBox.textContent = "Ошибка связи с сервером.";
+        spinBtn.disabled = true;
+      }
+    }
+
+    drawWheel();
+    refreshState();
+
+    spinBtn.addEventListener("click", async () => {
+      spinBtn.disabled = true;
+
+      try {
+        if (!tg || !userId) {
+          alert("Откройте колесо из Telegram-бота.");
+          spinBtn.disabled = false;
+          return;
+        }
+
+        const check = await apiIsCanSpin();
+
+        if (!check.ok) {
+          alert("Ошибка проверки доступа.");
+          await refreshState();
+          return;
+        }
+
+        if (!check.can_spin) {
+          if (check.reason === "cooldown") {
+            if (check.can_buy_spin) {
+              const ok = confirm(
+                `${check.wait_msg}\n\nИли крутить сейчас за ${check.spin_cost} ⭐? (у вас ${check.stars} ⭐)`
+              );
+
+              if (!ok) {
+                await refreshState();
+                return;
+              }
+
+              const buy = await apiBuySpin();
+              if (!buy.ok || !buy.success) {
+                alert(buy.message || buy.error || "Не удалось купить дополнительный спин.");
+                await refreshState();
+                return;
+              }
+            } else {
+              alert(`${check.wait_msg}\n\nЧтобы крутить сейчас, нужна ${check.spin_cost} ⭐. У вас: ${check.stars} ⭐`);
+              await refreshState();
+              return;
+            }
+          } else {
+            alert(check.message || "Сейчас вращение недоступно.");
+            await refreshState();
+            return;
+          }
+        }
+
+        const spinRes = await apiSpin();
+
+        if (!spinRes.ok) {
+          if (spinRes.error === "cooldown") {
+            alert("⏳ Колесо заряжается. Попробуйте позже.");
+          } else if (spinRes.error === "not_subscribed") {
+            alert("❌ Нет подписки на всех активных спонсоров.");
+          } else if (spinRes.error === "not_activated") {
+            alert("❌ Для доступа нужно 2 активных реферала.");
+          } else {
+            alert(spinRes.error || "Ошибка спина.");
+          }
+          await refreshState();
+          return;
+        }
+
+        const prizeCode = spinRes.prize;
+        const prizeLabel = spinRes.label || prizeCode;
+
+        const winningIndex = sectors.findIndex(s => s.code === prizeCode);
+        if (winningIndex < 0) {
+          alert("❌ Сервер вернул неизвестный приз.");
+          await refreshState();
+          return;
+        }
+
+        const spins = Math.floor(Math.random() * 5) + 5;
+        const sectorSize = 360 / numSectors;
+
+        const targetWinningAngleBase = (winningIndex * sectorSize) + (sectorSize / 2);
+        const jitter = (Math.random() - 0.5) * (sectorSize * 0.6);
+        const targetWinningAngle = (targetWinningAngleBase + jitter + 360) % 360;
+        const targetNormalizedRotation = (360 + 270 - targetWinningAngle) % 360;
+
+        const currentNormalizedRotation = ((currentRotation % 360) + 360) % 360;
+        let deltaToTarget = targetNormalizedRotation - currentNormalizedRotation;
+        if (deltaToTarget < 0) deltaToTarget += 360;
+
+        const totalRotation = (spins * 360) + deltaToTarget;
+
+        currentRotation += totalRotation;
+        canvas.style.transform = `rotate(${currentRotation}deg)`;
+
+        setTimeout(async () => {
+          showResultPopup("Результат", `Выпало: ${prizeLabel}`);
+          await refreshState();
+        }, 4000);
+
+      } catch (e) {
+        alert("Ошибка связи с сервером. Попробуйте позже.");
+        await refreshState();
+      }
+    });
+  </script>
+</body>
+</html>
