@@ -26,11 +26,11 @@ from telegram.ext import (
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-MY_DATABASE_URL = os.getenv("MY_DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("MY_DATABASE_URL")
 
 ADMINS = [514167463]
 BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot"
-WEBAPP_URL = "https://moygivawaybot.ru/index.html"
+WEBAPP_URL = os.getenv("WEBAPP_URL")
 
 IS_ACTIVE = True
 
@@ -49,9 +49,9 @@ FAQ_CB = "faq"
 
 
 def get_db_connection():
-    if not MY_DATABASE_URL:
-        raise RuntimeError("MY_DATABASE_URL is not set")
-    return psycopg2.connect(MY_DATABASE_URL)
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set")
+    return psycopg2.connect(DATABASE_URL)
 
 
 def utcnow():

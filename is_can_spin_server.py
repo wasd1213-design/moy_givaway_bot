@@ -11,7 +11,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-DATABASE_URL = os.getenv("MY_DATABASE_URL") or os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("MY_DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("No MY_DATABASE_URL/DATABASE_URL in environment")
 
