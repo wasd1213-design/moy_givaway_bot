@@ -1272,9 +1272,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = query.data
 
         if data in ("check_sub", "back_to_main"):
+            decay_result = await apply_inactivity_decay(uid, context)
             await count_valid_refs(uid, context)
             await recount_temp_order_progress(context)
             text = await get_start_text(uid, query.from_user.first_name, context)
+
+            if decay_result.get("decayed", 0) > 0:
+                text += (
+                    f"\n\n⚠️ <b>За период неактивности было списано:</b> {decay_result['decayed']}⭐\n"
+                    f"Чтобы сохранять баланс, заходите в бот хотя бы 1 раз в 7 дней."
+                )
 
             try:
                 await query.edit_message_text(
