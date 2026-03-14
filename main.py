@@ -484,6 +484,7 @@ def init_db():
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS all_subscribed INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS tickets INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_fortune_time TIMESTAMP NULL",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP NULL",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_ref_count INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_hold_bonus_count INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_hold_bonus_at TIMESTAMP NULL",
