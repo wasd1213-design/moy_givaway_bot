@@ -938,6 +938,64 @@ async def notify_level_up_if_needed(user_id: int, context: ContextTypes.DEFAULT_
         print("notify_level_up_if_needed error:", e)
 
 
+
+async def apply_inactivity_decay(user_id: int, context):
+    now = utcnow()
+
+    def _apply():
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT COALESCE(tickets, 0), last_active_at
+                    FROM users
+                    WHERE user_id = %s
+                """, (user_id,))
+                row = cur.fetchone()
+
+                if not row:
+                    return {"decayed": 0, "new_balance": None}
+
+                tickets, last_active_at = row
+                tickets = int(tickets or 0)
+
+                if last_active_at is None:
+                    cur.execute("""
+                        UPDATE users
+                        SET last_active_at = %s
+                        WHERE user_id = %s
+                    """, (now, user_id))
+                    conn.commit()
+                    return {"decayed": 0, "new_balance": tickets}
+
+                inactive_days = (now - last_active_at).days
+                decayed = 0
+                new_balance = tickets
+
+                if inactive_days > 7 and tickets > 100:
+                    penalty_days = inactive_days - 7
+                    penalty = penalty_days * 2
+                    new_balance = max(100, tickets - penalty)
+                    decayed = tickets - new_balance
+
+                    cur.execute("""
+                        UPDATE users
+                        SET tickets = %s,
+                            last_active_at = %s
+                        WHERE user_id = %s
+                    """, (new_balance, now, user_id))
+                else:
+                    cur.execute("""
+                        UPDATE users
+                        SET last_active_at = %s
+                        WHERE user_id = %s
+                    """, (now, user_id))
+
+                conn.commit()
+                return {"decayed": decayed, "new_balance": new_balance}
+
+    return await asyncio.to_thread(_apply)
+
+
 async def get_start_text(user_id, first_name, context):
     state = await get_user_state(user_id, context)
 
@@ -1038,6 +1096,7 @@ async def process_weekly_hold_bonus(user_id: int, context: ContextTypes.DEFAULT_
 
 
 async def show_profile(query_or_update, user_id: int, first_name: str, context: ContextTypes.DEFAULT_TYPE, edit=False):
+    decay_result = await apply_inactivity_decay(user_id, context)
     state = await get_user_state(user_id, context)
     me = query_or_update.from_user if hasattr(query_or_update, "from_user") else query_or_update.effective_user
 
@@ -1080,6 +1139,12 @@ async def show_profile(query_or_update, user_id: int, first_name: str, context: 
         f"🔗 Ваша реферальная ссылка:\n<code>{reflink}</code>"
     )
 
+    if decay_result.get("decayed", 0) > 0:
+        text += (
+            f"\n\n⚠️ <b>За период неактивности было списано:</b> {decay_result['decayed']}⭐\n"
+            f"Чтобы сохранять баланс, заходите в бот хотя бы 1 раз в 7 дней."
+        )
+
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]])
 
     if edit:
@@ -1117,6 +1182,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
     username = user.username
     first_name = user.first_name or "друг"
+    decay_result = await apply_inactivity_decay(user_id, context)
 
     referrer_id = None
     if context.args:
@@ -1171,6 +1237,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await notify_level_up_if_needed(referrer_id, context)
 
     text = await get_start_text(user_id, first_name, context)
+
+
+    if decay_result.get("decayed", 0) > 0:
+        text += (
+            f"\n\n⚠️ <b>За период неактивности было списано:</b> "
+            f"{decay_result['decayed']}⭐\n"
+            f"Чтобы сохранять баланс, заходите в бот хотя бы 1 раз в 7 дней."
+        )
     state = await get_user_state(user_id, context)
 
     await update.message.reply_text(
@@ -1445,6 +1519,8 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔️ Бот временно на паузе.")
         return
 
+    if not update.message or not update.message.text:
+        return
     text = update.message.text.strip()
     user = update.effective_user
     uid = user.id
