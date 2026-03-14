@@ -29,7 +29,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("MY_DATABASE_URL")
 
 ADMINS = [514167463]
-BOT_USERNAME_FOR_REFLINK = "moy_giveaway_bot"
+BOT_USERNAME_FOR_REFLINK = "StarEarnTG_bot"
 WEBAPP_URL = os.getenv("WEBAPP_URL")
 
 IS_ACTIVE = True
