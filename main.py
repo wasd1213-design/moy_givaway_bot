@@ -327,7 +327,7 @@ def get_reply_menu(user_id: int, bonus_percent: int = 0):
             [
                 KeyboardButton(
                     f"🌠 Звёздное Колесо (+{bonus_percent}% к выигрышу)",
-                    web_app=WebAppInfo(url=f"{WEBAPP_URL}?user_id={user_id}"),
+                    web_app=WebAppInfo(url=f"{WEBAPP_URL}?user_id={user_id}&v=2"),
                 ),
             ],
             [
