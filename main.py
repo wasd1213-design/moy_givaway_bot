@@ -51,14 +51,14 @@ FAQ_ITEMS = {
             "❓ <b>Как начать пользоваться ботом?</b>\n"
             "• Нажмите /start или кнопку «🌠 Звёздное Колесо» в меню\n"
             "• Подпишитесь на всех активных спонсоров (отмечены в профиле)\n"
-            "• Пригласите 2 активных реферала\n"
+            "• Пригласите 2 активных друга\n"
             "• После выполнения условий доступ к Колесу активируется автоматически ✅\n\n"
-            "❓ <b>Что такое активный реферал?</b>\n"
+            "❓ <b>Что такое активный друг?</b>\n"
             "Реферал считается активным, если он:\n"
-            "• Перешёл по вашей реферальной ссылке\n"
+            "• Перешёл по вашей ссылке для приглашения друзей\n"
             "• Подписался на все основные спонсорские каналы (слоты 1 и 2)\n\n"
-            "⚠️ Временный спонсор (слот 3) не учитывается при проверке активности рефералов.\n\n"
-            "❓ <b>Где моя реферальная ссылка?</b>\n"
+            "⚠️ Временный спонсор (слот 3) не учитывается при проверке активности друзей.\n\n"
+            "❓ <b>Где моя ссылка для приглашения друзей?</b>\n"
             "Откройте «👤 Профиль» — внизу будет ваша персональная ссылка.\n"
             "Копируйте и делитесь с друзьями!"
         ),
@@ -73,8 +73,8 @@ FAQ_ITEMS = {
             "❓ <b>Почему Колесо недоступно?</b>\n"
             "Возможные причины:\n"
             "• ❌ Не подписаны на спонсоров — подпишитесь на все каналы из списка\n"
-            "• ❌ Мало активных рефералов — пригласите ещё друзей\n"
-            "• ⏳ Кулдаун 6 часов — подождите или купите доп. спин\n\n"
+            "• ❌ Мало активных друзей — пригласите ещё друзей\n"
+            "• ⏳ Следующее бесплатное вращение будет через 6 часов — подождите или купите доп. спин\n\n"
             "❓ <b>Как проверить статус подписок?</b>\n"
             "Нажмите «🔄 Обновить статус» под главным сообщением или введите /start."
         ),
@@ -84,19 +84,19 @@ FAQ_ITEMS = {
         "text": (
             "❓ <b>Как работают уровни?</b>\n\n"
             "🥉 <b>Bronze</b>\n"
-            "• Активных рефералов: 0–4\n"
+            "• Активных друзей: 0–4\n"
             "• Бонус к выигрышу: +0%\n"
             "• Следующий уровень: Silver (5)\n\n"
             "🥈 <b>Silver</b>\n"
-            "• Активных рефералов: 5–9\n"
+            "• Активных друзей: 5–9\n"
             "• Бонус к выигрышу: +15%\n"
             "• Следующий уровень: Gold (10)\n\n"
             "🥇 <b>Gold</b>\n"
-            "• Активных рефералов: 10–14\n"
+            "• Активных друзей: 10–14\n"
             "• Бонус к выигрышу: +35%\n"
             "• Следующий уровень: Diamond (15)\n\n"
             "💎 <b>Diamond</b>\n"
-            "• Активных рефералов: 15+\n"
+            "• Активных друзей: 15+\n"
             "• Бонус к выигрышу: +60%\n"
             "• Максимальный уровень\n\n"
             "🎯 Бонус применяется к выигрышам в Колесе.\n\n"
@@ -169,8 +169,8 @@ FAQ_ITEMS = {
             "• ⭐ Баланс звёзд\n"
             "• 🏅 Текущий уровень и бонус\n"
             "• 🎁 Количество полученных недельных бонусов\n"
-            "• 👥 Количество активных рефералов\n"
-            "• 🔗 Ваша реферальная ссылка\n"
+            "• 👥 Количество активных друзей\n"
+            "• 🔗 Ваша ссылка для приглашения друзей\n"
             "• 🏆 Лидерборд"
         ),
     },
@@ -182,7 +182,7 @@ FAQ_ITEMS = {
             "• Откройте «🏆 Лидерборд» в меню\n"
             "• Топ-10 отображаются с указанием имени и количества звёзд\n"
             "• Обновляется в реальном времени\n\n"
-            "💡 Совет: активно приглашайте рефералов и участвуйте в активностях, "
+            "💡 Совет: активно приглашайте друзей и участвуйте в активностях, "
             "чтобы увеличить баланс!"
         ),
     },
@@ -198,7 +198,7 @@ FAQ_ITEMS = {
             "• Повторите отправку username\n\n"
             "❌ <b>Звёздное Колесо недоступно</b>\n"
             "• Проверьте подписки на спонсоров\n"
-            "• Убедитесь, что у вас ≥ 2 активных реферала\n"
+            "• Убедитесь, что у вас ≥ 2 активных друга\n"
             "• Нажмите «🔄 Обновить статус»"
         ),
     },
@@ -261,7 +261,7 @@ def build_faq_text(selected_key=None):
     text = (
         "📚 <b>FAQ — Звёздное Колесо</b>\n"
         "Полное руководство по использованию бота.\n"
-        "Сохраните себе или поделитесь с рефералами!"
+        "Сохраните себе или поделитесь с другами!"
     )
 
     if selected_key and selected_key in FAQ_ITEMS:
@@ -1003,13 +1003,13 @@ async def get_start_text(user_id, first_name, context):
     activation_text = (
         "✅ <b>Доступ к колесу активирован</b>\n"
         if state["activated"]
-        else "⚠️ <b>Для открытия колеса пригласите 2 активных реферала</b>\n"
+        else "⚠️ <b>Для открытия колеса пригласите 2 активных друга</b>\n"
     )
 
     if not state["all_subs_ok"]:
         wheel_access = "❌ <b>Звёздное Колесо недоступно: подпишитесь на всех активных спонсоров</b>"
     elif not state["activated"]:
-        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных рефералов</b>"
+        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных друзей</b>"
     else:
         wheel_access = "✅ <b>Звёздное Колесо доступно</b>"
 
@@ -1033,10 +1033,10 @@ async def get_start_text(user_id, first_name, context):
         f"🎯 <b>Бонус к выигрышу:</b> +{state['level']['bonus_percent']}%\n\n"
         f"📈 <b>Как быстрее расти в боте:</b>\n"
         f"• Колесо даёт базовый заработок\n"
-        f"• Основной прирост звёзд идёт через активных рефералов\n"
-        f"• Чем больше активных рефералов — тем выше ваш уровень\n"
+        f"• Основной прирост звёзд идёт через активных друзей\n"
+        f"• Чем больше активных друзей — тем выше ваш уровень\n"
         f"• Чем выше уровень — тем больше выигрыш с каждого вращения\n\n"
-        f"👥 <b>Активные рефералы:</b> {state['ref_count']}\n"
+        f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
         f"{progress_text}\n"
         f"💎 <b>Самый сильный прирост даёт уровень Diamond</b> — "
         f"там максимальный бонус к выигрышу.\n\n"
@@ -1108,19 +1108,19 @@ async def show_profile(query_or_update, user_id: int, first_name: str, context: 
     bonus_percent = state["level"]["bonus_percent"]
 
     if level_name == "Bronze":
-        refs_range = "0–4 реферала"
+        refs_range = "0–4 друга"
         next_hint = f"📈 До Silver осталось: <b>{max(0, 5 - ref_count)}</b>"
         benefit_hint = "На Silver шанс выигрыша уже выше благодаря бонусу <b>+15%</b>."
     elif level_name == "Silver":
-        refs_range = "5–9 рефералов"
+        refs_range = "5–9 друзей"
         next_hint = f"📈 До Gold осталось: <b>{max(0, 10 - ref_count)}</b>"
         benefit_hint = "На Gold шанс выигрыша становится ещё лучше: бонус <b>+35%</b>."
     elif level_name == "Gold":
-        refs_range = "10–14 рефералов"
+        refs_range = "10–14 друзей"
         next_hint = f"📈 До Diamond осталось: <b>{max(0, 15 - ref_count)}</b>"
         benefit_hint = "💎 На Diamond шанс выигрыша заметно выше: максимальный бонус <b>+60%</b>."
     else:
-        refs_range = "15+ рефералов"
+        refs_range = "15+ друзей"
         next_hint = "👑 У вас максимальный уровень."
         benefit_hint = "💎 На Diamond у вас максимальный бонус к выигрышу — <b>+60%</b>."
 
@@ -1136,8 +1136,8 @@ async def show_profile(query_or_update, user_id: int, first_name: str, context: 
         f"{next_hint}\n"
         f"{benefit_hint}\n\n"
         f"🎁 Недельных бонусов получено: <b>{state['weekly_hold_bonus_count']}/{MAX_WEEKLY_HOLD_BONUSES}</b>\n\n"
-        f"👥 Активные рефералы: <b>{ref_count}</b>\n"
-        f"🔗 Ваша реферальная ссылка:\n<code>{reflink}</code>"
+        f"👥 Активные друзья: <b>{ref_count}</b>\n"
+        f"🔗 Ваша ссылка для приглашения друзей:\n<code>{reflink}</code>"
     )
 
     if decay_result.get("decayed", 0) > 0:
@@ -1833,7 +1833,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Введите текст.")
         return
 
-    msg = " ".join(context.args)
+    msg = update.message.text.split(" ", 1)[1]
     await update.message.reply_text("⏳ Рассылка...")
 
     try:
@@ -2050,13 +2050,13 @@ async def get_start_text(user_id, first_name, context):
     activation_text = (
         "✅ <b>Доступ к колесу активирован</b>"
         if state["activated"]
-        else "⚠️ <b>Для открытия колеса пригласите 2 активных реферала</b>"
+        else "⚠️ <b>Для открытия колеса пригласите 2 активных друга</b>"
     )
 
     if not state["all_subs_ok"]:
         wheel_access = "❌ <b>Звёздное Колесо недоступно: подпишитесь на всех активных спонсоров</b>"
     elif not state["activated"]:
-        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных рефералов</b>"
+        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных друзей</b>"
     else:
         wheel_access = "✅ <b>Звёздное Колесо доступно</b>"
 
@@ -2073,8 +2073,8 @@ async def get_start_text(user_id, first_name, context):
         f"Начисление каждую неделю по {WEEKLY_HOLD_BONUS}⭐ "
         f"(если не отписались от спонсоров)\n\n"
         f"📌 <b>Активные спонсоры:</b>\n{state['channels_list']}\n"
-        f"👥 <b>Активные рефералы:</b> {state['ref_count']}\n"
-        f"🔗 <b>Ваша реферальная ссылка:</b>\n"
+        f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
+        f"🔗 <b>Ваша ссылка для приглашения друзей:</b>\n"
         f"<code>{reflink}</code>\n\n"
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
@@ -2100,8 +2100,8 @@ async def show_profile(query_or_update, user_id: int, first_name: str, context: 
         f"⭐ <b>Баланс:</b> {state['stars']}\n"
         f"🎁 <b>Недельных бонусов получено:</b> "
         f"{state['weekly_hold_bonus_count']}/{MAX_WEEKLY_HOLD_BONUSES}\n\n"
-        f"👥 <b>Активные рефералы:</b> {state['ref_count']}\n"
-        f"🔗 <b>Ваша реферальная ссылка:</b>\n"
+        f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
+        f"🔗 <b>Ваша ссылка для приглашения друзей:</b>\n"
         f"<code>{reflink}</code>\n\n"
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
@@ -2221,28 +2221,15 @@ def get_faq_keyboard(open_key=None):
 
 
 def build_faq_text(selected_key=None):
-    ordered_keys = [
-        "start",
-        "wheel",
-        "levels",
-        "weekly",
-        "exchange",
-        "sponsors",
-        "profile",
-        "problems",
-    ]
+    text = "❓ <b>Помощь</b>\n\n"
 
-    text = "❓ <b>Помощь</b>\n\nНажмите на интересующий раздел:\n"
-
-    for key in ordered_keys:
-        item = FAQ_ITEMS[key]
-        if key == selected_key:
-            text += f"\n▼ <b>{item['title']}</b>\n\n{item['text']}\n"
-        else:
-            text += f"\n▶ {item['title']}"
+    if selected_key and selected_key in FAQ_ITEMS:
+        item = FAQ_ITEMS[selected_key]
+        text += f"<b>{item['title']}</b>\n\n{item['text']}"
+    else:
+        text += "Выберите интересующий раздел кнопками ниже."
 
     return text
-
 
 def get_reply_menu(user_id: int, bonus_percent: int = 0):
     return ReplyKeyboardMarkup(
@@ -2274,13 +2261,13 @@ async def get_start_text(user_id, first_name, context):
     activation_text = (
         "✅ <b>Доступ к колесу активирован</b>"
         if state["activated"]
-        else "⚠️ <b>Для открытия колеса пригласите 2 активных реферала</b>"
+        else "⚠️ <b>Для открытия колеса пригласите 2 активных друга</b>"
     )
 
     if not state["all_subs_ok"]:
         wheel_access = "❌ <b>Звёздное Колесо недоступно: подпишитесь на всех активных спонсоров</b>"
     elif not state["activated"]:
-        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных рефералов</b>"
+        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных друзей</b>"
     else:
         wheel_access = "✅ <b>Звёздное Колесо доступно</b>"
 
@@ -2297,8 +2284,8 @@ async def get_start_text(user_id, first_name, context):
         f"Начисление каждую неделю по {WEEKLY_HOLD_BONUS}⭐ "
         f"(если не отписались от спонсоров)\n\n"
         f"📌 <b>Активные спонсоры:</b>\n{state['channels_list']}\n"
-        f"👥 <b>Активные рефералы:</b> {state['ref_count']}\n"
-        f"🔗 <b>Ваша реферальная ссылка:</b>\n"
+        f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
+        f"🔗 <b>Ваша ссылка для приглашения друзей:</b>\n"
         f"<code>{reflink}</code>\n\n"
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
@@ -2324,8 +2311,8 @@ async def show_profile(query_or_update, user_id: int, first_name: str, context: 
         f"⭐ <b>Баланс:</b> {state['stars']}\n"
         f"🎁 <b>Недельных бонусов получено:</b> "
         f"{state['weekly_hold_bonus_count']}/{MAX_WEEKLY_HOLD_BONUSES}\n\n"
-        f"👥 <b>Активные рефералы:</b> {state['ref_count']}\n"
-        f"🔗 <b>Ваша реферальная ссылка:</b>\n"
+        f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
+        f"🔗 <b>Ваша ссылка для приглашения друзей:</b>\n"
         f"<code>{reflink}</code>\n\n"
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
@@ -2376,6 +2363,29 @@ async def faq_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise e
 
 
+
+async def reset_weekly_hold_bonuses_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET weekly_hold_bonus_count = 0,
+                        last_hold_bonus_at = NULL
+                    """
+                )
+                conn.commit()
+
+        await update.message.reply_text(
+            "✅ Недельные бонусы сброшены. Пользователи снова смогут получать бонус до 4 недель."
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка при сбросе: {e}")
+
 def main():
     init_db()
 
@@ -2388,6 +2398,7 @@ def main():
     app.add_handler(CommandHandler("broadcast", broadcast))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("weekly_bonus", weekly_bonus_all))
+    app.add_handler(CommandHandler("reset_weekly_hold_bonuses", reset_weekly_hold_bonuses_cmd))
     app.add_handler(CommandHandler("stop", stop_bot))
     app.add_handler(CommandHandler("resume", resume_bot))
 
