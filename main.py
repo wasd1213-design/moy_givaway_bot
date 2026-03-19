@@ -37,12 +37,24 @@ IS_ACTIVE = True
 START_BONUS = 20
 WEEKLY_HOLD_BONUS = 20
 MAX_WEEKLY_HOLD_BONUSES = 4
-EXTRA_SPIN_COST = 1
+EXTRA_SPIN_COST = 2
 
 PREMIUM_COST = 1300
 WITHDRAW_MIN = 700
 CHANNEL_PROMO_COST = 200
 CHANNEL_PROMO_PRIORITY_COST = 250
+
+BOOST_10_COST = 25
+BOOST_10_PERCENT = 10
+BOOST_10_SPINS = 5
+
+BOOST_20_COST = 60
+BOOST_20_PERCENT = 20
+BOOST_20_SPINS = 10
+
+BOOST_35_COST = 140
+BOOST_35_PERCENT = 35
+BOOST_35_SPINS = 20
 
 FAQ_ITEMS = {
     "start": {
@@ -70,6 +82,11 @@ FAQ_ITEMS = {
             f"• 🎁 Бесплатно: 1 раз в 6 часов\n"
             f"• ⭐ За звёзды: дополнительное вращение за {EXTRA_SPIN_COST} ⭐\n"
             "• Откройте через кнопку «🌠 Звёздное Колесо» в меню или WebApp\n\n"
+            "❓ <b>От чего зависит выигрыш?</b>\n"
+            "Итоговый бонус к выигрышу складывается из:\n"
+            "• 🎁 бонуса за активацию\n"
+            "• 🏅 бонуса уровня\n"
+            "• ⚡ временного буста (если активен)\n\n"
             "❓ <b>Почему Колесо недоступно?</b>\n"
             "Возможные причины:\n"
             "• ❌ Не подписаны на спонсоров — подпишитесь на все каналы из списка\n"
@@ -89,15 +106,15 @@ FAQ_ITEMS = {
             "• Следующий уровень: Silver (5)\n\n"
             "🥈 <b>Silver</b>\n"
             "• Активных друзей: 5–9\n"
-            "• Бонус к выигрышу: +15%\n"
+            "• Бонус к выигрышу: +20%\n"
             "• Следующий уровень: Gold (10)\n\n"
             "🥇 <b>Gold</b>\n"
             "• Активных друзей: 10–14\n"
-            "• Бонус к выигрышу: +35%\n"
+            "• Бонус к выигрышу: +45%\n"
             "• Следующий уровень: Diamond (15)\n\n"
             "💎 <b>Diamond</b>\n"
             "• Активных друзей: 15+\n"
-            "• Бонус к выигрышу: +60%\n"
+            "• Бонус к выигрышу: +80%\n"
             "• Максимальный уровень\n\n"
             "🎯 Бонус применяется к выигрышам в Колесе.\n\n"
             "❓ <b>Как получить уведомление о повышении уровня?</b>\n"
@@ -127,12 +144,19 @@ FAQ_ITEMS = {
             f"• 💎 Telegram Premium (3 мес) — {PREMIUM_COST} ⭐\n"
             f"• 💸 Вывод звёзд — от {WITHDRAW_MIN} ⭐\n"
             f"• 📢 Канал в списке спонсоров — {CHANNEL_PROMO_COST} ⭐\n"
-            f"• ⚡ Вне очереди (приоритет) — {CHANNEL_PROMO_PRIORITY_COST} ⭐\n\n"
+            f"• ⚡ Вне очереди (приоритет) — {CHANNEL_PROMO_PRIORITY_COST} ⭐\n"
+            f"• ⚡ Буст +{BOOST_10_PERCENT}% на {BOOST_10_SPINS} спинов — {BOOST_10_COST} ⭐\n"
+            f"• ⚡ Буст +{BOOST_20_PERCENT}% на {BOOST_20_SPINS} спинов — {BOOST_20_COST} ⭐\n"
+            f"• ⚡ Буст +{BOOST_35_PERCENT}% на {BOOST_35_SPINS} спинов — {BOOST_35_COST} ⭐\n\n"
+            "❓ <b>Как работают бусты?</b>\n"
+            "• Буст даёт временный дополнительный процент к выигрышу\n"
+            "• Буст действует только на указанное число спинов\n"
+            "• Пока один буст активен, новый купить нельзя\n\n"
             "❓ <b>Как оформить заявку?</b>\n"
             "• Откройте «🔄 Обмен звёзд»\n"
             "• Выберите нужную опцию\n"
             "• Подтвердите списание\n"
-            "• Заявка автоматически уйдёт администратору\n\n"
+            "• Заявка автоматически уйдёт администратору или активируется сразу\n\n"
             "❓ <b>Как вывести звёзды?</b>\n"
             "Только для Diamond-пользователей:\n"
             f"• Минимальная сумма: {WITHDRAW_MIN} ⭐\n"
@@ -261,7 +285,7 @@ def get_level_info(ref_count: int):
         return {
             "name": "Diamond",
             "emoji": "💎",
-            "bonus_percent": 60,
+            "bonus_percent": 80,
             "next_target": None,
             "next_name": None,
         }
@@ -269,7 +293,7 @@ def get_level_info(ref_count: int):
         return {
             "name": "Gold",
             "emoji": "🥇",
-            "bonus_percent": 35,
+            "bonus_percent": 45,
             "next_target": 15,
             "next_name": "Diamond",
         }
@@ -277,7 +301,7 @@ def get_level_info(ref_count: int):
         return {
             "name": "Silver",
             "emoji": "🥈",
-            "bonus_percent": 15,
+            "bonus_percent": 20,
             "next_target": 10,
             "next_name": "Gold",
         }
@@ -303,6 +327,9 @@ def get_exchange_inline():
             [InlineKeyboardButton("💸 Вывод звёзд", callback_data="exchange_withdraw")],
             [InlineKeyboardButton(f"📢 Ваш канал в списке спонсоров — {CHANNEL_PROMO_COST} ⭐", callback_data="exchange_promo")],
             [InlineKeyboardButton(f"⚡ Вне очереди — {CHANNEL_PROMO_PRIORITY_COST} ⭐", callback_data="exchange_promo_priority")],
+            [InlineKeyboardButton(f"⚡ Буст +{BOOST_10_PERCENT}% на {BOOST_10_SPINS} спинов — {BOOST_10_COST} ⭐", callback_data="exchange_boost_10")],
+            [InlineKeyboardButton(f"⚡ Буст +{BOOST_20_PERCENT}% на {BOOST_20_SPINS} спинов — {BOOST_20_COST} ⭐", callback_data="exchange_boost_20")],
+            [InlineKeyboardButton(f"⚡ Буст +{BOOST_35_PERCENT}% на {BOOST_35_SPINS} спинов — {BOOST_35_COST} ⭐", callback_data="exchange_boost_35")],
             [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")],
         ]
     )
@@ -340,6 +367,7 @@ def init_db():
                         referred_id BIGINT,
                         is_valid BOOLEAN DEFAULT FALSE,
                         checked_at TIMESTAMP NULL,
+                        inactive_since TIMESTAMP NULL,
                         UNIQUE(referrer_id, referred_id)
                     )
                     """
@@ -431,6 +459,11 @@ def init_db():
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS all_subscribed INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS tickets INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_fortune_time TIMESTAMP NULL",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS active_ref_count INT DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS activation_bonus_percent INT DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS boost_percent INT DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS boost_spins_left INT DEFAULT 0",
+                    "ALTER TABLE referrals ADD COLUMN IF NOT EXISTS inactive_since TIMESTAMP NULL",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP NULL",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_ref_count INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_hold_bonus_count INT DEFAULT 0",
@@ -708,58 +741,110 @@ async def place_next_temp_order(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def count_valid_refs(referrer_id: int, context: ContextTypes.DEFAULT_TYPE) -> int:
-    valid_count = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    grace_period = timedelta(days=30)
+    active_count = 0
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT referred_id, COALESCE(is_valid, FALSE) FROM referrals WHERE referrer_id=%s",
+                "SELECT referred_id, COALESCE(is_valid, FALSE), inactive_since FROM referrals WHERE referrer_id=%s",
                 (referrer_id,),
             )
             rows = cur.fetchall()
 
             main_sponsors = await get_active_sponsors(include_temp=False)
 
-            for referred_id, is_valid in rows:
-                if is_valid:
-                    valid_count += 1
-                    continue
+            for referred_id, was_valid, inactive_since in rows:
+                valid_now = True
 
                 if len(main_sponsors) < 2:
-                    continue
+                    valid_now = False
+                else:
+                    for sponsor in main_sponsors:
+                        if not await check_subscription(referred_id, sponsor["channel_username"], context):
+                            valid_now = False
+                            break
 
-                subscribed_all_main = True
-                for sponsor in main_sponsors:
-                    if not await check_subscription(referred_id, sponsor["channel_username"], context):
-                        subscribed_all_main = False
-                        break
-
-                if subscribed_all_main:
+                if valid_now:
                     cur.execute(
                         """
                         UPDATE referrals
-                        SET is_valid = TRUE, checked_at = %s
+                        SET is_valid = TRUE,
+                            checked_at = %s,
+                            inactive_since = NULL
                         WHERE referrer_id = %s AND referred_id = %s
                         """,
-                        (utcnow(), referrer_id, referred_id),
+                        (now, referrer_id, referred_id),
                     )
-                    valid_count += 1
+                    active_count += 1
+                else:
+                    if was_valid:
+                        inactive_since_naive = to_naive_utc(inactive_since)
+
+                        if inactive_since_naive is None:
+                            cur.execute(
+                                """
+                                UPDATE referrals
+                                SET checked_at = %s,
+                                    inactive_since = %s
+                                WHERE referrer_id = %s AND referred_id = %s
+                                """,
+                                (now, now, referrer_id, referred_id),
+                            )
+                            active_count += 1
+                        elif (now - inactive_since_naive) < grace_period:
+                            cur.execute(
+                                """
+                                UPDATE referrals
+                                SET checked_at = %s
+                                WHERE referrer_id = %s AND referred_id = %s
+                                """,
+                                (now, referrer_id, referred_id),
+                            )
+                            active_count += 1
+                        else:
+                            cur.execute(
+                                """
+                                UPDATE referrals
+                                SET checked_at = %s
+                                WHERE referrer_id = %s AND referred_id = %s
+                                """,
+                                (now, referrer_id, referred_id),
+                            )
+                    else:
+                        cur.execute(
+                            """
+                            UPDATE referrals
+                            SET checked_at = %s
+                            WHERE referrer_id = %s AND referred_id = %s
+                            """,
+                            (now, referrer_id, referred_id),
+                        )
 
             cur.execute(
-                "UPDATE users SET lifetime_ref_count = %s WHERE user_id = %s",
-                (valid_count, referrer_id),
+                "UPDATE users SET active_ref_count = %s WHERE user_id = %s",
+                (active_count, referrer_id),
             )
 
-            if valid_count >= 2:
-                cur.execute(
-                    "UPDATE users SET activated = TRUE WHERE user_id = %s",
-                    (referrer_id,),
-                )
+            cur.execute(
+                """
+                UPDATE users
+                SET activated = TRUE,
+                    activation_bonus_percent = CASE
+                        WHEN COALESCE(activation_bonus_percent, 0) < 5 THEN 5
+                        ELSE activation_bonus_percent
+                    END
+                WHERE user_id = %s
+                  AND COALESCE(activated, FALSE) = FALSE
+                  AND %s >= 2
+                """,
+                (referrer_id, active_count),
+            )
 
             conn.commit()
 
-    return valid_count
-
+    return active_count
 
 async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     sponsors = await get_active_sponsors(include_temp=True)
@@ -807,11 +892,14 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 """
                 SELECT
                     COALESCE(activated, FALSE),
-                    COALESCE(lifetime_ref_count, 0),
+                    COALESCE(active_ref_count, 0),
                     COALESCE(tickets, 0),
                     COALESCE(weekly_hold_bonus_count, 0),
                     last_fortune_time,
-                    COALESCE(last_level_notified, 'Bronze')
+                    COALESCE(last_level_notified, 'Bronze'),
+                    COALESCE(activation_bonus_percent, 0),
+                    COALESCE(boost_percent, 0),
+                    COALESCE(boost_spins_left, 0)
                 FROM users
                 WHERE user_id = %s
                 """,
@@ -826,6 +914,9 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     weekly_hold_bonus_count = 0
     last_fortune_time = None
     last_level_notified = "Bronze"
+    activation_bonus_percent = 0
+    boost_percent = 0
+    boost_spins_left = 0
 
     if row:
         (
@@ -835,9 +926,17 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
             weekly_hold_bonus_count,
             last_fortune_time,
             last_level_notified,
+            activation_bonus_percent,
+            boost_percent,
+            boost_spins_left,
         ) = row
 
     level = get_level_info(ref_count)
+    total_bonus_percent = (
+        int(level["bonus_percent"])
+        + int(activation_bonus_percent or 0)
+        + int(boost_percent or 0)
+    )
 
     return {
         "activated": activated,
@@ -849,6 +948,10 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         "last_fortune_time": to_naive_utc(last_fortune_time),
         "level": level,
         "last_level_notified": last_level_notified,
+        "activation_bonus_percent": int(activation_bonus_percent or 0),
+        "boost_percent": int(boost_percent or 0),
+        "boost_spins_left": int(boost_spins_left or 0),
+        "total_bonus_percent": total_bonus_percent,
     }
 
 
@@ -878,7 +981,7 @@ async def notify_level_up_if_needed(user_id: int, context: ContextTypes.DEFAULT_
                         text=(
                             f"🎉 <b>Поздравляем!</b>\n\n"
                             f"Ваш уровень повышен до <b>{state['level']['emoji']} {current_level}</b>\n"
-                            f"🌠 <b>Бонус к выигрышу:</b> +{state['level']['bonus_percent']}%"
+                            f"🌠 <b>Итоговый бонус к выигрышу:</b> +{state['total_bonus_percent']}%"
                         ),
                         parse_mode=ParseMode.HTML,
                     )
@@ -918,10 +1021,10 @@ async def apply_inactivity_decay(user_id: int, context):
                 decayed = 0
                 new_balance = tickets
 
-                if inactive_days > 7 and tickets > 100:
+                if inactive_days > 10 and tickets > 150:
                     penalty_days = inactive_days - 7
                     penalty = penalty_days * 2
-                    new_balance = max(100, tickets - penalty)
+                    new_balance = max(150, tickets - penalty)
                     decayed = tickets - new_balance
 
                     cur.execute("""
@@ -1076,7 +1179,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(
         "Выберите действие из меню ниже 👇",
-        reply_markup=get_reply_menu(user_id, state["level"]["bonus_percent"]),
+        reply_markup=get_reply_menu(user_id, state["total_bonus_percent"]),
     )
 
 
@@ -1093,6 +1196,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = query.data
 
         if data in ("check_sub", "back_to_main"):
+            try:
+                await query.edit_message_text(
+                    "⏳ <b>Идёт обновление...</b>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_main_inline(),
+                )
+            except Exception:
+                pass
+
             decay_result = await apply_inactivity_decay(uid, context)
             await count_valid_refs(uid, context)
             await recount_temp_order_progress(context)
@@ -1115,6 +1227,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
                 else:
                     raise e
+
+            state = await get_user_state(uid, context)
+            await query.message.reply_text(
+                "Выберите действие из меню ниже 👇",
+                reply_markup=get_reply_menu(uid, state["total_bonus_percent"]),
+            )
 
         elif data == "profile":
             await show_profile(query, uid, query.from_user.first_name, context, edit=True)
@@ -1250,6 +1368,92 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await query.edit_message_text(
                 "✅ Заявка на вывод создана. Администратор получил уведомление.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                ),
+            )
+
+        elif data in ("exchange_boost_10", "exchange_boost_20", "exchange_boost_35"):
+            state = await get_user_state(uid, context)
+
+            if data == "exchange_boost_10":
+                boost_cost = BOOST_10_COST
+                boost_percent = BOOST_10_PERCENT
+                boost_spins = BOOST_10_SPINS
+                exchange_type = "boost_10_5"
+            elif data == "exchange_boost_20":
+                boost_cost = BOOST_20_COST
+                boost_percent = BOOST_20_PERCENT
+                boost_spins = BOOST_20_SPINS
+                exchange_type = "boost_20_10"
+            else:
+                boost_cost = BOOST_35_COST
+                boost_percent = BOOST_35_PERCENT
+                boost_spins = BOOST_35_SPINS
+                exchange_type = "boost_35_20"
+
+            if state.get("boost_spins_left", 0) > 0:
+                await query.edit_message_text(
+                    (
+                        "❌ <b>У вас уже активен буст</b>\n\n"
+                        f"Текущий буст: <b>+{state.get('boost_percent', 0)}%</b>\n"
+                        f"Осталось спинов: <b>{state.get('boost_spins_left', 0)}</b>"
+                    ),
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            if state["stars"] < boost_cost:
+                await query.edit_message_text(
+                    (
+                        "❌ <b>Недостаточно звёзд</b>\n\n"
+                        f"Стоимость буста: <b>{boost_cost} ⭐</b>\n"
+                        f"Ваш баланс: <b>{state['stars']} ⭐</b>"
+                    ),
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
+                    ),
+                )
+                return
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET
+                            tickets = tickets - %s,
+                            boost_percent = %s,
+                            boost_spins_left = %s
+                        WHERE user_id = %s
+                        RETURNING tickets
+                        """,
+                        (boost_cost, boost_percent, boost_spins, uid),
+                    )
+                    new_balance = int(cur.fetchone()[0])
+
+                    cur.execute(
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (uid, query.from_user.username, exchange_type, boost_cost),
+                    )
+                    conn.commit()
+
+            await query.edit_message_text(
+                (
+                    "✅ <b>Буст активирован!</b>\n\n"
+                    f"⚡ Бонус: <b>+{boost_percent}%</b>\n"
+                    f"🎯 Действует на: <b>{boost_spins}</b> спинов\n"
+                    f"⭐ Списано: <b>{boost_cost}</b>\n"
+                    f"💰 Остаток: <b>{new_balance}</b>"
+                ),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("🔙 Назад", callback_data="exchange")]]
@@ -1886,7 +2090,11 @@ async def get_start_text(user_id, first_name, context):
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
         f"{progress['progress_bar']} {progress['remaining_text']}\n"
-        f"✨ <b>Бонус:</b> +{state['level']['bonus_percent']}% к выигрышу\n\n"
+        f"✨ <b>Бонус за активацию:</b> +{state['activation_bonus_percent']}%\n"
+        f"🏅 <b>Бонус уровня:</b> +{state['level']['bonus_percent']}%\n"
+        f"⚡ <b>Временный буст:</b> "
+        f"{('+' + str(state['boost_percent']) + '% (осталось ' + str(state['boost_spins_left']) + ' спина)') if state['boost_spins_left'] > 0 else 'нет'}\n"
+        f"🌠 <b>Итоговый бонус:</b> +{state['total_bonus_percent']}% к выигрышу\n\n"
         f"{activation_text}\n"
         f"{wheel_access}"
     )
@@ -1913,7 +2121,11 @@ async def show_profile(query_or_update, user_id: int, first_name: str, context: 
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
         f"{progress['progress_bar']} {progress['remaining_text']}\n"
-        f"✨ <b>Бонус:</b> +{state['level']['bonus_percent']}% к выигрышу"
+        f"✨ <b>Бонус за активацию:</b> +{state['activation_bonus_percent']}%\n"
+        f"🏅 <b>Бонус уровня:</b> +{state['level']['bonus_percent']}%\n"
+        f"⚡ <b>Временный буст:</b> "
+        f"{('+' + str(state['boost_percent']) + '% (осталось ' + str(state['boost_spins_left']) + ' спина)') if state['boost_spins_left'] > 0 else 'нет'}\n"
+        f"🌠 <b>Итоговый бонус:</b> +{state['total_bonus_percent']}% к выигрышу"
     )
 
     if decay_result.get("decayed", 0) > 0:

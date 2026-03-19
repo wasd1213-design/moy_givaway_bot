@@ -16,7 +16,7 @@ if not DATABASE_URL:
     raise RuntimeError("No MY_DATABASE_URL/DATABASE_URL in environment")
 
 COOLDOWN_HOURS = 6
-SPIN_COST_STARS = 1
+SPIN_COST_STARS = 2
 
 BASE_WEIGHTS = {
     "nothing": 50.0,
@@ -28,20 +28,20 @@ BASE_WEIGHTS = {
 }
 
 PRIZE_TO_STARS = {
-    "star_1": 1,
-    "star_2": 2,
-    "star_3": 3,
-    "star_4": 4,
-    "star_5": 5,
+    "star_1": 2,
+    "star_2": 4,
+    "star_3": 6,
+    "star_4": 8,
+    "star_5": 10,
 }
 
 LABEL_MAP = {
     "nothing": "Ничего",
-    "star_1": "+1 звезда",
-    "star_2": "+2 звезды",
-    "star_3": "+3 звезды",
-    "star_4": "+4 звезды",
-    "star_5": "+5 звёзд",
+    "star_1": "+2 звезды",
+    "star_2": "+4 звезды",
+    "star_3": "+6 звёзд",
+    "star_4": "+8 звёзд",
+    "star_5": "+10 звёзд",
 }
 
 
@@ -64,22 +64,22 @@ def get_level_info(ref_count: int):
         return {
             "name": "Diamond",
             "emoji": "🌟",
-            "bonus_percent": 60,
-            "multiplier": 1.60,
+            "bonus_percent": 80,
+            "multiplier": 1.80,
         }
     if ref_count >= 10:
         return {
             "name": "Gold",
             "emoji": "🥇",
-            "bonus_percent": 35,
-            "multiplier": 1.35,
+            "bonus_percent": 45,
+            "multiplier": 1.45,
         }
     if ref_count >= 5:
         return {
             "name": "Silver",
             "emoji": "🥈",
-            "bonus_percent": 15,
-            "multiplier": 1.15,
+            "bonus_percent": 20,
+            "multiplier": 1.20,
         }
     return {
         "name": "Bronze",
@@ -92,9 +92,9 @@ def get_level_info(ref_count: int):
 def get_wheel_weights_by_level(level_name: str):
     multipliers = {
         "Bronze": 1.00,
-        "Silver": 1.15,
-        "Gold": 1.35,
-        "Diamond": 1.60,
+        "Silver": 1.20,
+        "Gold": 1.45,
+        "Diamond": 1.80,
     }
 
     mult = multipliers.get(level_name, 1.00)
@@ -157,7 +157,10 @@ def get_user_state(cur, user_id: int):
             last_fortune_time,
             COALESCE(all_subscribed, 0),
             COALESCE(activated, FALSE),
-            COALESCE(lifetime_ref_count, 0)
+            COALESCE(active_ref_count, 0),
+            COALESCE(activation_bonus_percent, 0),
+            COALESCE(boost_percent, 0),
+            COALESCE(boost_spins_left, 0)
         FROM users
         WHERE user_id = %s
         """,
@@ -167,13 +170,25 @@ def get_user_state(cur, user_id: int):
     if not row:
         return None
 
-    stars, last_time, all_subscribed, activated, ref_count = row
+    (
+        stars,
+        last_time,
+        all_subscribed,
+        activated,
+        ref_count,
+        activation_bonus_percent,
+        boost_percent,
+        boost_spins_left,
+    ) = row
     return {
         "stars": int(stars or 0),
         "last_time": to_naive_utc(last_time),
         "all_subscribed": int(all_subscribed or 0),
         "activated": bool(activated),
         "ref_count": int(ref_count or 0),
+        "activation_bonus_percent": int(activation_bonus_percent or 0),
+        "boost_percent": int(boost_percent or 0),
+        "boost_spins_left": int(boost_spins_left or 0),
     }
 
 
@@ -196,6 +211,7 @@ def is_can_spin():
             main_sponsors = get_active_sponsors(cur, include_temp=False)
 
             level = get_level_info(state["ref_count"])
+            total_bonus_percent = int(state.get("activation_bonus_percent", 0)) + int(level["bonus_percent"]) + int(state.get("boost_percent", 0))
             weights = get_wheel_weights_by_level(level["name"])
 
             if not main_sponsors:
@@ -211,6 +227,10 @@ def is_can_spin():
                         "level": level["name"],
                         "level_emoji": level["emoji"],
                         "bonus_percent": level["bonus_percent"],
+                        "activation_bonus_percent": state.get("activation_bonus_percent", 0),
+                        "boost_percent": state.get("boost_percent", 0),
+                        "boost_spins_left": state.get("boost_spins_left", 0),
+                        "total_bonus_percent": total_bonus_percent,
                         "weights": weights,
                     }
                 )
@@ -229,6 +249,10 @@ def is_can_spin():
                         "level": level["name"],
                         "level_emoji": level["emoji"],
                         "bonus_percent": level["bonus_percent"],
+                        "activation_bonus_percent": state.get("activation_bonus_percent", 0),
+                        "boost_percent": state.get("boost_percent", 0),
+                        "boost_spins_left": state.get("boost_spins_left", 0),
+                        "total_bonus_percent": total_bonus_percent,
                         "weights": weights,
                     }
                 )
@@ -246,6 +270,10 @@ def is_can_spin():
                         "level": level["name"],
                         "level_emoji": level["emoji"],
                         "bonus_percent": level["bonus_percent"],
+                        "activation_bonus_percent": state.get("activation_bonus_percent", 0),
+                        "boost_percent": state.get("boost_percent", 0),
+                        "boost_spins_left": state.get("boost_spins_left", 0),
+                        "total_bonus_percent": total_bonus_percent,
                         "weights": weights,
                     }
                 )
@@ -267,6 +295,10 @@ def is_can_spin():
                         "level": level["name"],
                         "level_emoji": level["emoji"],
                         "bonus_percent": level["bonus_percent"],
+                        "activation_bonus_percent": state.get("activation_bonus_percent", 0),
+                        "boost_percent": state.get("boost_percent", 0),
+                        "boost_spins_left": state.get("boost_spins_left", 0),
+                        "total_bonus_percent": total_bonus_percent,
                         "weights": weights,
                     }
                 )
@@ -287,6 +319,10 @@ def is_can_spin():
                         "level": level["name"],
                         "level_emoji": level["emoji"],
                         "bonus_percent": level["bonus_percent"],
+                        "activation_bonus_percent": state.get("activation_bonus_percent", 0),
+                        "boost_percent": state.get("boost_percent", 0),
+                        "boost_spins_left": state.get("boost_spins_left", 0),
+                        "total_bonus_percent": total_bonus_percent,
                         "weights": weights,
                     }
                 )
@@ -310,6 +346,10 @@ def is_can_spin():
                     "level": level["name"],
                     "level_emoji": level["emoji"],
                     "bonus_percent": level["bonus_percent"],
+                        "activation_bonus_percent": state.get("activation_bonus_percent", 0),
+                        "boost_percent": state.get("boost_percent", 0),
+                        "boost_spins_left": state.get("boost_spins_left", 0),
+                        "total_bonus_percent": total_bonus_percent,
                     "weights": weights,
                 }
             )
@@ -486,6 +526,7 @@ def spin():
                 ), 200
 
             level = get_level_info(state["ref_count"])
+            total_bonus_percent = int(state.get("activation_bonus_percent", 0)) + int(level["bonus_percent"]) + int(state.get("boost_percent", 0))
             weights_dict = get_wheel_weights_by_level(level["name"])
 
             codes = ["nothing", "star_1", "star_2", "star_3", "star_4", "star_5"]
@@ -499,7 +540,8 @@ def spin():
             ]
 
             prize_code = random.choices(codes, weights=weights, k=1)[0]
-            add_stars = PRIZE_TO_STARS.get(prize_code, 0)
+            base_stars = PRIZE_TO_STARS.get(prize_code, 0)
+            add_stars = int(round(base_stars * (1 + total_bonus_percent / 100.0))) if base_stars > 0 else 0
             spin_id = str(uuid.uuid4())
 
             cur.execute(
@@ -510,26 +552,39 @@ def spin():
                 (spin_id, user_id, prize_code, now),
             )
 
+            new_boost_spins_left = int(state.get("boost_spins_left", 0))
+            new_boost_percent = int(state.get("boost_percent", 0))
+
+            if new_boost_spins_left > 0:
+                new_boost_spins_left -= 1
+                if new_boost_spins_left <= 0:
+                    new_boost_spins_left = 0
+                    new_boost_percent = 0
+
             if add_stars > 0:
                 cur.execute(
                     """
                     UPDATE users
                     SET tickets = COALESCE(tickets, 0) + %s,
-                        last_fortune_time = %s
+                        last_fortune_time = %s,
+                        boost_percent = %s,
+                        boost_spins_left = %s
                     WHERE user_id = %s
                     RETURNING tickets
                     """,
-                    (add_stars, now, user_id),
+                    (add_stars, now, new_boost_percent, new_boost_spins_left, user_id),
                 )
             else:
                 cur.execute(
                     """
                     UPDATE users
-                    SET last_fortune_time = %s
+                    SET last_fortune_time = %s,
+                        boost_percent = %s,
+                        boost_spins_left = %s
                     WHERE user_id = %s
                     RETURNING tickets
                     """,
-                    (now, user_id),
+                    (now, new_boost_percent, new_boost_spins_left, user_id),
                 )
 
             new_stars = cur.fetchone()[0]
@@ -546,6 +601,10 @@ def spin():
             "level": level["name"],
             "level_emoji": level["emoji"],
             "bonus_percent": level["bonus_percent"],
+            "activation_bonus_percent": state.get("activation_bonus_percent", 0),
+            "boost_percent": new_boost_percent,
+            "boost_spins_left": new_boost_spins_left,
+            "total_bonus_percent": total_bonus_percent,
             "weights": weights_dict,
         }
     )
