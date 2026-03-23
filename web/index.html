@@ -171,8 +171,10 @@
     if (tg) tg.expand();
 
     const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode") || "main";
+    const initData = tg?.initData || "";
     const userIdFromUrl = params.get("user_id");
-    const userId = userIdFromUrl ? Number(userIdFromUrl) : tg?.initDataUnsafe?.user?.id;
+    const userId = tg?.initDataUnsafe?.user?.id || (userIdFromUrl ? Number(userIdFromUrl) : null);
 
     const canvas = document.getElementById("wheel");
     const ctx = canvas.getContext("2d");
@@ -206,12 +208,30 @@
     const arc = (2 * Math.PI) / numSectors;
     let currentRotation = 0;
 
+    async function apiPost(url, payload = {}) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          init_data: initData
+        })
+      });
+      return await r.json();
+    }
+
     async function apiIsCanSpin() {
+      if (initData) {
+        return await apiPost(`/api/is_can_spin`);
+      }
       const r = await fetch(`/api/is_can_spin?user_id=${userId}`);
       return await r.json();
     }
 
     async function apiBuySpin() {
+      if (initData) {
+        return await apiPost(`/api/buy_spin`);
+      }
       const r = await fetch(`/api/buy_spin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,7 +241,24 @@
     }
 
     async function apiSpin() {
+      if (initData) {
+        return await apiPost(`/api/spin`);
+      }
       const r = await fetch(`/api/spin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId })
+      });
+      return await r.json();
+    }
+
+    async function apiWelcomeStatus() {
+      const r = await fetch(`/api/welcome_status?user_id=${userId}`);
+      return await r.json();
+    }
+
+    async function apiWelcomeSpin() {
+      const r = await fetch(`/api/welcome_spin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId })
@@ -315,16 +352,39 @@
     }
 
     async function refreshState() {
-      if (!userId) {
-        statusBox.textContent = "Не удалось определить user_id. Откройте колесо из Telegram-бота.";
+      if (!tg || (!initData && !userId)) {
+        statusBox.textContent = "Откройте WebApp только из Telegram-бота.";
         spinBtn.disabled = true;
         return;
       }
 
       try {
+        if (mode === "welcome") {
+          const check = await apiWelcomeStatus();
+          if (!check.ok) {
+            statusBox.textContent = `Ошибка загрузки статуса: ${check.error || "unknown"}`;
+            spinBtn.disabled = true;
+            return;
+          }
+
+          starsLine.textContent = `⭐ Баланс: ${check.stars ?? "—"}`;
+          if (paidSpinsLine) paidSpinsLine.textContent = "⚡ Временный буст: нет";
+          levelLine.textContent = "🏅 Уровень: —";
+          wheelBonusLine.textContent = "🌠 Звёздное Колесо: приветственный спин";
+          statusLine.textContent = "приветственный спин";
+          statusBox.textContent = check.welcome_available
+            ? "🎁 Вам доступен один приветственный спин. Крутите колесо и забирайте первые звёзды!"
+            : "✅ Приветственный спин уже использован. Вернитесь в бот и продолжайте участие.";
+          spinBtn.textContent = check.welcome_available
+            ? "🎁 ЗАБРАТЬ ПРИВЕТСТВЕННЫЙ СПИН"
+            : "⬅️ ВЕРНУТЬСЯ В БОТА";
+          spinBtn.disabled = false;
+          return;
+        }
+
         const check = await apiIsCanSpin();
         if (!check.ok) {
-          statusBox.textContent = "Ошибка загрузки статуса.";
+          statusBox.textContent = `Ошибка загрузки статуса: ${check.error || "unknown"}`;
           spinBtn.disabled = true;
           return;
         }
@@ -342,9 +402,78 @@
       spinBtn.disabled = true;
 
       try {
-        if (!tg || !userId) {
-          alert("Откройте колесо из Telegram-бота.");
+        if (!tg || (!initData && !userId)) {
+          alert("Откройте WebApp только из Telegram-бота.");
           spinBtn.disabled = false;
+          return;
+        }
+
+        if (mode === "welcome") {
+          if (spinBtn.dataset.welcomeDone === "1") {
+            if (tg?.close) tg.close();
+            spinBtn.disabled = false;
+            return;
+          }
+
+          const check = await apiWelcomeStatus();
+          if (!check.ok) {
+            alert("Ошибка проверки приветственного спина.");
+            await refreshState();
+            return;
+          }
+
+          if (!check.welcome_available) {
+            if (tg?.close) tg.close();
+            spinBtn.disabled = false;
+            return;
+          }
+
+          const spinRes = await apiWelcomeSpin();
+          if (!spinRes.ok) {
+            alert(spinRes.message || "Не удалось выполнить приветственный спин.");
+            await refreshState();
+            return;
+          }
+
+          const prizeCode = spinRes.prize;
+          const prizeLabel = spinRes.label || prizeCode;
+
+          const winningIndex = sectors.findIndex(s => s.code === prizeCode);
+          if (winningIndex < 0) {
+            alert("❌ Сервер вернул неизвестный приз.");
+            await refreshState();
+            return;
+          }
+
+          const spins = Math.floor(Math.random() * 5) + 5;
+          const sectorSize = 360 / numSectors;
+
+          const targetWinningAngleBase = (winningIndex * sectorSize) + (sectorSize / 2);
+          const jitter = (Math.random() - 0.5) * (sectorSize * 0.6);
+          const targetWinningAngle = (targetWinningAngleBase + jitter + 360) % 360;
+          const targetNormalizedRotation = (360 + 270 - targetWinningAngle) % 360;
+
+          const currentNormalizedRotation = ((currentRotation % 360) + 360) % 360;
+          let deltaToTarget = targetNormalizedRotation - currentNormalizedRotation;
+          if (deltaToTarget < 0) deltaToTarget += 360;
+
+          const totalRotation = (spins * 360) + deltaToTarget;
+
+          currentRotation += totalRotation;
+          canvas.style.transform = `rotate(${currentRotation}deg)`;
+
+          setTimeout(async () => {
+            showResultPopup("Результат", `Выпало: ${prizeLabel}`);
+            starsLine.textContent = `⭐ Баланс: ${spinRes.stars ?? "—"}`;
+            statusLine.textContent = "приветственный спин получен";
+            statusBox.textContent = "✅ Приветственный спин использован. Вернитесь в бот и нажмите /start, чтобы продолжить.";
+            wheelBonusLine.textContent = "🌠 Звёздное Колесо: приветственный спин получен";
+            spinBtn.textContent = "⬅️ ВЕРНУТЬСЯ В БОТ";
+            spinBtn.disabled = false;
+            spinBtn.dataset.welcomeDone = "1";
+            spinBtn.dataset.welcomeStars = "";
+          }, 4000);
+
           return;
         }
 
