@@ -10,6 +10,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     KeyboardButton,
     WebAppInfo,
 )
@@ -313,6 +314,19 @@ def get_exchange_inline():
     )
 
 
+def get_welcome_inline(user_id: int):
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🌠 Звёздное Колесо",
+                    web_app=WebAppInfo(url=f"{WEBAPP_URL}?user_id={user_id}&mode=welcome&v=2"),
+                )
+            ],
+        ]
+    )
+
+
 def init_db():
     try:
         with get_db_connection() as conn:
@@ -333,7 +347,8 @@ def init_db():
                         last_hold_bonus_at TIMESTAMP NULL,
                         last_level_notified TEXT DEFAULT 'Bronze',
                         last_seen TIMESTAMP NULL,
-                        created_at TIMESTAMP DEFAULT NOW()
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        welcome_spin_used BOOLEAN DEFAULT FALSE
                     )
                     """
                 )
@@ -453,6 +468,7 @@ def init_db():
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS referrer_id BIGINT NULL",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_spin_used BOOLEAN DEFAULT FALSE",
                 ]
 
                 for stmt in alter_statements:
@@ -924,7 +940,8 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                     COALESCE(last_level_notified, 'Bronze'),
                     COALESCE(activation_bonus_percent, 0),
                     COALESCE(boost_percent, 0),
-                    COALESCE(boost_spins_left, 0)
+                    COALESCE(boost_spins_left, 0),
+                    COALESCE(welcome_spin_used, FALSE)
                 FROM users
                 WHERE user_id = %s
                 """,
@@ -942,6 +959,7 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     activation_bonus_percent = 0
     boost_percent = 0
     boost_spins_left = 0
+    welcome_spin_used = False
 
     if row:
         (
@@ -954,6 +972,7 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
             activation_bonus_percent,
             boost_percent,
             boost_spins_left,
+            welcome_spin_used,
         ) = row
 
     level = get_level_info(ref_count)
@@ -976,6 +995,7 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         "activation_bonus_percent": int(activation_bonus_percent or 0),
         "boost_percent": int(boost_percent or 0),
         "boost_spins_left": int(boost_spins_left or 0),
+        "welcome_spin_used": bool(welcome_spin_used),
         "total_bonus_percent": total_bonus_percent,
     }
 
@@ -1187,8 +1207,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await count_valid_refs(referrer_id, context)
         await notify_level_up_if_needed(referrer_id, context)
 
-    text = await get_start_text(user_id, first_name, context)
+    state = await get_user_state(user_id, context)
 
+    if not state.get("welcome_spin_used", False):
+        text = await get_welcome_start_text(user_id, first_name, context)
+        await update.message.reply_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_welcome_inline(user_id),
+        )
+        return
+
+    text = await get_start_text(user_id, first_name, context)
 
     if decay_result.get("decayed", 0) > 0:
         text += (
@@ -1205,7 +1235,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(
         "Выберите действие из меню ниже 👇",
-        reply_markup=get_reply_menu(user_id, state["activated"], state["total_bonus_percent"]),
+        reply_markup=get_reply_menu(
+            user_id,
+            state["activated"],
+            state["total_bonus_percent"],
+            state["welcome_spin_used"],
+        ),
     )
 
 
@@ -1235,6 +1270,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await recount_temp_order_progress(context)
 
             state = await get_user_state(uid, context)
+
+            if not state.get("welcome_spin_used", False):
+                text = await get_welcome_start_text(uid, query.from_user.first_name, context)
+                try:
+                    await query.edit_message_text(
+                        text,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=get_welcome_inline(uid),
+                    )
+                except Exception as e:
+                    if "not modified" in str(e).lower():
+                        pass
+                    else:
+                        raise e
+                return
+
             text = await get_start_text(uid, query.from_user.first_name, context)
 
             if decay_result.get("decayed", 0) > 0:
@@ -1258,7 +1309,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             state = await get_user_state(uid, context)
             await query.message.reply_text(
                 "Выберите действие из меню ниже 👇",
-                reply_markup=get_reply_menu(uid, state["activated"], state["total_bonus_percent"]),
+                reply_markup=get_reply_menu(
+                    uid,
+                    state["activated"],
+                    state["total_bonus_percent"],
+                    state["welcome_spin_used"],
+                ),
             )
 
         elif data == "profile":
@@ -1636,6 +1692,15 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             f"✅ Канал {channel_username} сохранён.\nЗаявка одобрена и будет поставлена в очередь."
+        )
+        return
+
+    state = await get_user_state(uid, context)
+
+    if text == "🌠 Звёздное Колесо" and not state.get("welcome_spin_used", False):
+        await update.message.reply_text(
+            "Нажмите кнопку <b>«🌠 Звёздное Колесо»</b> в сообщении выше, чтобы открыть приветственный спин.",
+            parse_mode=ParseMode.HTML,
         )
         return
 
@@ -2182,7 +2247,29 @@ def build_invite_text(user_id: int):
         "• подписался на 2 основных спонсорских канала"
     )
 
-def get_reply_menu(user_id: int, activated: bool, bonus_percent: int = 0):
+async def get_welcome_start_text(user_id, first_name, context):
+    state = await get_user_state(user_id, context)
+    return (
+        f"👋 <b>Привет, {first_name}!</b>\n\n"
+        f"В <b>StarEarn</b> основной источник звёзд — это\n"
+        f"🌠 <b>Звёздное Колесо</b>\n\n"
+        f"На первый запуск вам уже доступен\n"
+        f"🎁 <b>приветственный спин</b>\n\n"
+        f"Попробуйте прямо сейчас и получите свои первые звёзды 👇\n\n"
+        f"⭐ <b>Баланс:</b> {state['stars']}"
+    )
+
+def get_reply_menu(user_id: int, activated: bool, bonus_percent: int = 0, welcome_spin_used: bool = True):
+    if not welcome_spin_used:
+        return ReplyKeyboardMarkup(
+            [
+                [KeyboardButton("🌠 Звёздное Колесо")],
+                [KeyboardButton("🔒 Профиль"), KeyboardButton("🔒 Обмен звёзд")],
+                [KeyboardButton("🏆 Лидерборд"), KeyboardButton("🔒 Помощь")],
+            ],
+            resize_keyboard=True,
+        )
+
     if not activated:
         return ReplyKeyboardMarkup(
             [

@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 import os
+import json
+import hmac
+import hashlib
 import random
 import uuid
+from urllib.parse import parse_qsl
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 from datetime import datetime, timedelta, timezone
 
 import psycopg2
@@ -12,8 +18,13 @@ app = Flask(__name__)
 CORS(app)
 
 DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("MY_DATABASE_URL")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
 if not DATABASE_URL:
     raise RuntimeError("No MY_DATABASE_URL/DATABASE_URL in environment")
+
+if not BOT_TOKEN:
+    raise RuntimeError("No BOT_TOKEN in environment")
 
 COOLDOWN_HOURS = 6
 SPIN_COST_STARS = 2
@@ -44,6 +55,15 @@ LABEL_MAP = {
     "star_5": "+10 звёзд",
 }
 
+WELCOME_WEIGHTS = {
+    "nothing": 10.0,
+    "star_1": 28.0,
+    "star_2": 27.0,
+    "star_3": 18.0,
+    "star_4": 12.0,
+    "star_5": 5.0,
+}
+
 
 def get_conn():
     return psycopg2.connect(DATABASE_URL)
@@ -57,6 +77,106 @@ def to_naive_utc(dt):
     if dt is None:
         return None
     return dt.replace(tzinfo=None)
+
+
+def validate_telegram_webapp_init_data(init_data: str):
+    if not init_data:
+        return None, "missing_init_data"
+
+    try:
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = parsed.pop("hash", None)
+
+        if not received_hash:
+            return None, "missing_hash"
+
+        data_check_string = "\n".join(
+            f"{k}={v}" for k, v in sorted(parsed.items(), key=lambda x: x[0])
+        )
+
+        secret_key = hmac.new(
+            b"WebAppData",
+            BOT_TOKEN.encode(),
+            hashlib.sha256
+        ).digest()
+
+        calculated_hash = hmac.new(
+            secret_key,
+            data_check_string.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(calculated_hash, received_hash):
+            return None, "invalid_hash"
+
+        user_raw = parsed.get("user")
+        if not user_raw:
+            return None, "missing_user"
+
+        user_data = json.loads(user_raw)
+        user_id = user_data.get("id")
+
+        if not user_id:
+            return None, "missing_user_id"
+
+        auth_date = parsed.get("auth_date")
+        if auth_date:
+            try:
+                auth_ts = int(auth_date)
+                now_ts = int(datetime.now(timezone.utc).timestamp())
+                if now_ts - auth_ts > 86400:
+                    return None, "init_data_expired"
+            except Exception:
+                return None, "bad_auth_date"
+
+        return {
+            "user_id": int(user_id),
+            "user": user_data,
+            "raw": parsed,
+        }, None
+
+    except Exception as e:
+        return None, f"validation_exception:{e}"
+
+
+def get_verified_webapp_user():
+    data = request.get_json(silent=True) or {}
+    init_data = data.get("init_data")
+
+    if not init_data:
+        init_data = request.headers.get("X-Telegram-Init-Data", "")
+
+    verified, error = validate_telegram_webapp_init_data(init_data)
+    if error:
+        return None, jsonify({"ok": False, "error": error}), 403
+
+    return verified, None, None
+
+
+def resolve_webapp_user_id():
+    data = request.get_json(silent=True) or {}
+
+    init_data = data.get("init_data")
+    if not init_data:
+        init_data = request.headers.get("X-Telegram-Init-Data", "")
+
+    if init_data:
+        verified, error = validate_telegram_webapp_init_data(init_data)
+        if error:
+            return None, jsonify({"ok": False, "error": error}), 403
+        return int(verified["user_id"]), None, None
+
+    user_id = data.get("user_id")
+    if not user_id:
+        user_id = request.args.get("user_id", type=int)
+
+    if not user_id:
+        return None, jsonify({"ok": False, "error": "missing_user_id"}), 400
+
+    try:
+        return int(user_id), None, None
+    except Exception:
+        return None, jsonify({"ok": False, "error": "bad_user_id"}), 400
 
 
 def get_level_info(ref_count: int):
@@ -154,7 +274,8 @@ def get_user_state(cur, user_id: int):
             COALESCE(activation_bonus_percent, 0),
             COALESCE(boost_percent, 0),
             COALESCE(boost_spins_left, 0),
-            COALESCE(paid_spins, 0)
+            COALESCE(paid_spins, 0),
+            COALESCE(welcome_spin_used, FALSE)
         FROM users
         WHERE user_id = %s
         """,
@@ -174,6 +295,7 @@ def get_user_state(cur, user_id: int):
         boost_percent,
         boost_spins_left,
         paid_spins,
+        welcome_spin_used,
     ) = row
     return {
         "stars": int(stars or 0),
@@ -185,14 +307,180 @@ def get_user_state(cur, user_id: int):
         "boost_percent": int(boost_percent or 0),
         "boost_spins_left": int(boost_spins_left or 0),
         "paid_spins": int(paid_spins or 0),
+        "welcome_spin_used": bool(welcome_spin_used),
     }
 
 
-@app.get("/api/is_can_spin")
-def is_can_spin():
+
+
+def send_post_welcome_message(user_id: int, stars: int):
+    text = (
+        "🎉 <b>Приветственный спин получен!</b>\n\n"
+        "Теперь откройте полный путь к <b>Звёздному Колесу</b>:\n"
+        "1. Подпишитесь на спонсоров\n"
+        "2. Пригласите 2 активных друзей\n"
+        "3. Нажмите <b>«Обновить статус»</b>\n\n"
+        f"⭐ <b>Баланс:</b> {stars}"
+    )
+
+    reply_markup = {
+        "inline_keyboard": [
+            [{"text": "📢 Подписаться на спонсоров", "callback_data": "show_sponsors"}],
+            [{"text": "📨 Моя ссылка", "callback_data": "my_ref_link"}],
+            [{"text": "🔄 Обновить статус", "callback_data": "check_subs"}],
+        ]
+    }
+
+    payload = json.dumps({
+        "chat_id": user_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "reply_markup": reply_markup,
+    }).encode("utf-8")
+
+    req = Request(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(req, timeout=10) as resp:
+            resp.read()
+    except Exception as e:
+        print(f"send_post_welcome_message error: {e}")
+
+
+@app.post("/api/me")
+def api_me():
+    verified, error_response, status_code = get_verified_webapp_user()
+    if error_response:
+        return error_response, status_code
+
+    return jsonify({
+        "ok": True,
+        "user_id": verified["user_id"],
+        "user": verified["user"],
+    })
+
+
+@app.get("/api/welcome_status")
+def welcome_status():
     user_id = request.args.get("user_id", type=int)
     if not user_id:
         return jsonify({"ok": False, "error": "missing_user_id"}), 400
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            state = get_user_state(cur, user_id)
+            if state is None:
+                return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+            return jsonify(
+                {
+                    "ok": True,
+                    "welcome_available": not state.get("welcome_spin_used", False),
+                    "stars": state["stars"],
+                    "message": "Приветственный спин доступен." if not state.get("welcome_spin_used", False) else "Приветственный спин уже использован.",
+                }
+            )
+
+
+@app.post("/api/welcome_spin")
+def welcome_spin():
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "missing_user_id"}), 400
+
+    user_id = int(user_id)
+    now = now_utc()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            state = get_user_state(cur, user_id)
+            if state is None:
+                return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+            if state.get("welcome_spin_used", False):
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "welcome_already_used",
+                        "message": "Приветственный спин уже использован.",
+                    }
+                ), 200
+
+            codes = ["nothing", "star_1", "star_2", "star_3", "star_4", "star_5"]
+            weights = [
+                WELCOME_WEIGHTS["nothing"],
+                WELCOME_WEIGHTS["star_1"],
+                WELCOME_WEIGHTS["star_2"],
+                WELCOME_WEIGHTS["star_3"],
+                WELCOME_WEIGHTS["star_4"],
+                WELCOME_WEIGHTS["star_5"],
+            ]
+
+            prize_code = random.choices(codes, weights=weights, k=1)[0]
+            add_stars = PRIZE_TO_STARS.get(prize_code, 0)
+            spin_id = str(uuid.uuid4())
+
+            cur.execute(
+                """
+                INSERT INTO fortune_spins (spin_id, user_id, prize_code, created_at)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (spin_id, user_id, f"welcome:{prize_code}", now),
+            )
+
+            if add_stars > 0:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET tickets = COALESCE(tickets, 0) + %s,
+                        welcome_spin_used = TRUE
+                    WHERE user_id = %s
+                    RETURNING tickets
+                    """,
+                    (add_stars, user_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET welcome_spin_used = TRUE
+                    WHERE user_id = %s
+                    RETURNING tickets
+                    """,
+                    (user_id,),
+                )
+
+            row = cur.fetchone()
+            new_stars = int((row[0] or 0) if row else 0)
+            conn.commit()
+
+            send_post_welcome_message(user_id, new_stars)
+
+            return jsonify(
+                {
+                    "ok": True,
+                    "spin_id": spin_id,
+                    "prize": prize_code,
+                    "label": LABEL_MAP.get(prize_code, prize_code),
+                    "add_stars": add_stars,
+                    "stars": new_stars,
+                    "welcome_used": True,
+                    "weights": WELCOME_WEIGHTS,
+                }
+            )
+
+
+@app.route("/api/is_can_spin", methods=["GET", "POST"])
+def is_can_spin():
+    user_id, error_response, status_code = resolve_webapp_user_id()
+    if error_response:
+        return error_response, status_code
 
     now = now_utc()
     cooldown = timedelta(hours=COOLDOWN_HOURS)
@@ -363,12 +651,9 @@ def is_can_spin():
 
 @app.post("/api/buy_spin")
 def buy_spin():
-    data = request.get_json(silent=True) or {}
-    user_id = data.get("user_id")
-    if not user_id:
-        return jsonify({"ok": False, "error": "missing_user_id"}), 400
-
-    user_id = int(user_id)
+    user_id, error_response, status_code = resolve_webapp_user_id()
+    if error_response:
+        return error_response, status_code
     now = now_utc()
     cooldown = timedelta(hours=COOLDOWN_HOURS)
 
@@ -473,12 +758,9 @@ def buy_spin():
 
 @app.post("/api/spin")
 def spin():
-    data = request.get_json(silent=True) or {}
-    user_id = data.get("user_id")
-    if not user_id:
-        return jsonify({"ok": False, "error": "missing_user_id"}), 400
-
-    user_id = int(user_id)
+    user_id, error_response, status_code = resolve_webapp_user_id()
+    if error_response:
+        return error_response, status_code
     now = now_utc()
     cooldown = timedelta(hours=COOLDOWN_HOURS)
 
