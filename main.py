@@ -2126,6 +2126,16 @@ def make_progress_bar(current, target, length=10):
     return "🟩" * filled + "⬜" * empty
 
 
+def format_friends_left(left: int) -> str:
+    if left % 10 == 1 and left % 100 != 11:
+        word = "активного друга"
+    elif left % 10 in [2, 3, 4] and left % 100 not in [12, 13, 14]:
+        word = "активных друга"
+    else:
+        word = "активных друзей"
+    return f"(осталось пригласить {left} {word} до следующего уровня)"
+
+
 def get_level_progress_data(ref_count: int):
     level = get_level_info(ref_count)
 
@@ -2160,9 +2170,8 @@ def get_level_progress_data(ref_count: int):
             f"<b>{ref_count}/{target}</b>"
         ),
         "progress_bar": progress_bar,
-        "remaining_text": f"(осталось {left})",
+        "remaining_text": format_friends_left(left),
     }
-
 
 def get_faq_keyboard(open_key=None):
     items = [
@@ -2328,32 +2337,24 @@ async def get_start_text(user_id, first_name, context):
     progress = get_level_progress_data(state["ref_count"])
     reflink = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
 
-    activation_text = (
-        "✅ <b>Доступ к колесу активирован</b>"
-        if state["activated"]
-        else "⚠️ <b>Для открытия колеса пригласите 2 активных друга</b>"
-    )
-
     if not state["all_subs_ok"]:
         wheel_access = "❌ <b>Звёздное Колесо недоступно: подпишитесь на всех активных спонсоров</b>"
-    elif not state["activated"]:
-        wheel_access = "❌ <b>Звёздное Колесо недоступно: не хватает 2 активных друзей</b>"
     else:
         wheel_access = "✅ <b>Звёздное Колесо доступно</b>"
 
     return (
         f"👋 <b>Привет, {first_name}!</b>\n\n"
-        f"Крути <b>Звёздное Колесо</b> — выигрывай звёзды ⭐\n"
-        f"Звёзды меняй на призы: Premium, вывод, продвижение канала!\n\n"
+        f"✅ <b>Звёздное Колесо уже активировано</b>\n"
+        f"Теперь твоя задача — <b>повышать уровень, увеличивать бонус и зарабатывать больше звёзд</b> ⭐\n\n"
         f"⭐ <b>Баланс:</b> {state['stars']}\n\n"
-        f"🚀 <b>Как начать за 3 шага:</b>\n"
-        f"1️⃣ Подпишись на каналы спонсоров ✅\n"
-        f"2️⃣ Пригласи 2 друзей по своей ссылке\n"
-        f"3️⃣ Крути колесо и забирай звёзды!\n\n"
-        f"💡 <b>Бесплатное вращение</b> — раз в 6 часов.\n"
-        f"Хочешь чаще? Трать звёзды на спины — {EXTRA_SPIN_COST}⭐ за спин\n"
-        f"Начисление каждую неделю по {WEEKLY_HOLD_BONUS}⭐ "
-        f"(если не отписались от спонсоров)\n\n"
+        f"🚀 <b>Что делать сейчас:</b>\n"
+        f"1️⃣ Крути <b>Звёздное Колесо</b> и собирай звёзды\n"
+        f"2️⃣ Приглашай новых <b>активных друзей</b> и повышай уровень\n"
+        f"3️⃣ Используй звёзды на <b>бусты, обмен и продвижение</b>\n\n"
+        f"💡 <b>Как зарабатывать больше:</b>\n"
+        f"• Бесплатное вращение — 1 раз в 6 часов\n"
+        f"• Начисление каждую неделю по {WEEKLY_HOLD_BONUS}⭐ (если не отписались от спонсоров)\n"
+        f"• Чем выше уровень, тем выше шанс выпадения звёздных секторов\n\n"
         f"📌 <b>Активные спонсоры:</b>\n{state['channels_list']}\n"
         f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
         f"🔗 <b>Ваша ссылка для приглашения друзей:</b>\n"
@@ -2365,12 +2366,10 @@ async def get_start_text(user_id, first_name, context):
         f"🏅 <b>Бонус уровня:</b> +{state['level']['bonus_percent']}%\n"
         f"🌠 <b>Буст:</b> "
         f"{('+' + str(state['boost_percent']) + '% (осталось ' + str(state['boost_spins_left']) + ' спина)') if state['boost_spins_left'] > 0 else 'нет'}\n"
-        f"🌠 <b>Бонус к Звёздному Колесу:</b> +{state['total_bonus_percent']}%\n"
+        f"🌠 <b>Общий бонус к Звёздному Колесу:</b> +{state['total_bonus_percent']}%\n"
         f"📌 <b>Этот бонус повышает шанс выпадения звёздных секторов</b>\n\n"
-        f"{activation_text}\n"
         f"{wheel_access}"
     )
-
 
 async def show_profile(query_or_update, user_id: int, first_name: str, context: ContextTypes.DEFAULT_TYPE, edit=False):
     decay_result = await apply_inactivity_decay(user_id, context)
