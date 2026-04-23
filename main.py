@@ -45,9 +45,6 @@ WITHDRAW_MIN = 700
 CHANNEL_PROMO_COST = 200
 CHANNEL_PROMO_PRIORITY_COST = 300
 
-FIRST_INVITED_FRIEND_BONUS = 20
-FIRST_INVITED_FRIEND_BONUS_PERCENT = 5
-
 BOOST_10_COST = 20
 BOOST_10_PERCENT = 10
 BOOST_10_SPINS = 5
@@ -67,8 +64,8 @@ FAQ_ITEMS = {
             "❓ <b>Как начать пользоваться ботом?</b>\n"
             "• Нажмите /start или кнопку «🌠 Звёздное Колесо» в меню\n"
             "• Подпишитесь на всех активных спонсоров\n"
-            "• Подпишитесь на 2 основных спонсорских канала\n"
-            "• После подписки доступ к Колесу откроется автоматически ✅\n\n"
+            "• Пригласите 2 активных друга\n"
+            "• После выполнения условий доступ к Колесу откроется автоматически ✅\n\n"
             "❓ <b>Кто считается активным другом?</b>\n"
             "Активный друг — это пользователь, который:\n"
             "• перешёл по вашей ссылке\n"
@@ -84,11 +81,11 @@ FAQ_ITEMS = {
             "❓ <b>Как крутить Колесо?</b>\n"
             f"• Бесплатно: 1 раз в 6 часов\n"
             f"• Дополнительный спин: за {EXTRA_SPIN_COST} ⭐\n"
-            "• Открыть Колесо можно после подписки на 2 основных спонсоров\n\n"
+            "• Открыть Колесо можно через кнопку в меню или WebApp\n\n"
             "❓ <b>Почему Колесо недоступно?</b>\n"
             "Проверьте:\n"
             "• подписку на всех активных спонсоров\n"
-            ""
+            "• наличие 2 активных друзей\n"
             "• не действует ли ещё таймер 6 часов\n\n"
             "❓ <b>Как обновить статус?</b>\n"
             "Нажмите «🔄 Обновить статус» под главным сообщением или введите /start."
@@ -99,18 +96,21 @@ FAQ_ITEMS = {
         "text": (
             "❓ <b>Как работают уровни?</b>\n\n"
             "🥉 <b>Bronze</b>\n"
-            "• 0–3 активных друга\n"
+            "• 0–4 активных друга\n"
             "• Бонус к Звёздному Колесу: +0%\n"
-            "• Если вы пригласили первого друга, дополнительно даётся +5% к шансу выпадения звёздных секторов\n\n"
+            "• После активации Колеса дополнительно даётся +5% к шансу выпадения звёздных секторов\n\n"
             "🥈 <b>Silver</b>\n"
-            "• 4–7 активных друзей\n"
-            "• Бонус к Звёздному Колесу: +15%\n\n"
+            "• 5–9 активных друзей\n"
+            "• Бонус к Звёздному Колесу: +20%\n"
+            "• Итого с бонусом активации: +25% к шансу выпадения звёздных секторов\n\n"
             "🥇 <b>Gold</b>\n"
-            "• 8–11 активных друзей\n"
-            "• Бонус к Звёздному Колесу: +35%\n\n"
+            "• 10–14 активных друзей\n"
+            "• Бонус к Звёздному Колесу: +45%\n"
+            "• Итого с бонусом активации: +50% к шансу выпадения звёздных секторов\n\n"
             "💎 <b>Diamond</b>\n"
-            "• 12+ активных друзей\n"
-            "• Бонус к Звёздному Колесу: +60%\n\n"
+            "• 15+ активных друзей\n"
+            "• Бонус к Звёздному Колесу: +80%\n"
+            "• Итого с бонусом активации: +85% к шансу выпадения звёздных секторов\n\n"
             "⚡ Если у вас активен буст, он дополнительно повышает шанс выпадения звёздных секторов."
         ),
     },
@@ -191,7 +191,7 @@ FAQ_ITEMS = {
             "❌ <b>Недостаточно звёзд</b>\n"
             "Проверьте баланс в «👤 Профиль» и накопите нужное количество звёзд.\n\n"
             "❌ <b>Звёздное Колесо недоступно</b>\n"
-            "Проверьте подписку на всех активных спонсоров и нажмите «🔄 Обновить статус».\n\n"
+            "Проверьте подписку на всех активных спонсоров, наличие 2 активных друзей и нажмите «🔄 Обновить статус».\n\n"
             "❌ <b>Не получается вывести звёзды или получить Premium</b>\n"
             "Для этих функций нужен достаточный баланс и Diamond-уровень.\n\n"
             "❌ <b>Не получается добавить канал</b>\n"
@@ -253,35 +253,35 @@ async def check_subscription(user_id, channel, context):
 
 
 def get_level_info(ref_count: int):
-    if ref_count >= 12:
+    if ref_count >= 15:
         return {
             "name": "Diamond",
             "emoji": "💎",
-            "bonus_percent": 60,
+            "bonus_percent": 80,
             "next_target": None,
             "next_name": None,
         }
-    if ref_count >= 8:
+    if ref_count >= 10:
         return {
             "name": "Gold",
             "emoji": "🥇",
-            "bonus_percent": 35,
-            "next_target": 12,
+            "bonus_percent": 45,
+            "next_target": 15,
             "next_name": "Diamond",
         }
-    if ref_count >= 4:
+    if ref_count >= 5:
         return {
             "name": "Silver",
             "emoji": "🥈",
-            "bonus_percent": 15,
-            "next_target": 8,
+            "bonus_percent": 20,
+            "next_target": 10,
             "next_name": "Gold",
         }
     return {
         "name": "Bronze",
         "emoji": "🥉",
         "bonus_percent": 0,
-        "next_target": 4,
+        "next_target": 5,
         "next_name": "Silver",
     }
 
@@ -332,35 +332,119 @@ def init_db():
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS users (\n                        user_id BIGINT PRIMARY KEY,\n                        username TEXT,\n                        first_name TEXT,\n                        referrer_id BIGINT NULL,\n                        activated BOOLEAN DEFAULT FALSE,\n                        all_subscribed INT DEFAULT 0,\n                        tickets INT DEFAULT 0,\n                        last_fortune_time TIMESTAMP NULL,\n                        lifetime_ref_count INT DEFAULT 0,\n                        invited_ref_count INT DEFAULT 0,\n                        weekly_hold_bonus_count INT DEFAULT 0,\n                        last_hold_bonus_at TIMESTAMP NULL,\n                        last_level_notified TEXT DEFAULT 'Bronze',\n                        last_seen TIMESTAMP NULL,\n                        created_at TIMESTAMP DEFAULT NOW(),\n                        welcome_spin_used BOOLEAN DEFAULT FALSE,\n                        paid_spins INT DEFAULT 0,\n                        first_invite_bonus_paid BOOLEAN DEFAULT FALSE\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id BIGINT PRIMARY KEY,
+                        username TEXT,
+                        first_name TEXT,
+                        referrer_id BIGINT NULL,
+                        activated BOOLEAN DEFAULT FALSE,
+                        all_subscribed INT DEFAULT 0,
+                        tickets INT DEFAULT 0,
+                        last_fortune_time TIMESTAMP NULL,
+                        lifetime_ref_count INT DEFAULT 0,
+                        weekly_hold_bonus_count INT DEFAULT 0,
+                        last_hold_bonus_at TIMESTAMP NULL,
+                        last_level_notified TEXT DEFAULT 'Bronze',
+                        last_seen TIMESTAMP NULL,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        welcome_spin_used BOOLEAN DEFAULT FALSE
+                    )
+                    """
                 )
 
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS referrals (\n                        referrer_id BIGINT,\n                        referred_id BIGINT,\n                        is_valid BOOLEAN DEFAULT FALSE,\n                        checked_at TIMESTAMP NULL,\n                        inactive_since TIMESTAMP NULL,\n                        UNIQUE(referrer_id, referred_id)\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS referrals (
+                        referrer_id BIGINT,
+                        referred_id BIGINT,
+                        is_valid BOOLEAN DEFAULT FALSE,
+                        checked_at TIMESTAMP NULL,
+                        inactive_since TIMESTAMP NULL,
+                        UNIQUE(referrer_id, referred_id)
+                    )
+                    """
                 )
 
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS channel_subscriptions (\n                        user_id BIGINT,\n                        channel_id TEXT,\n                        subscribed_at TIMESTAMPTZ DEFAULT NOW(),\n                        PRIMARY KEY (user_id, channel_id)\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS channel_subscriptions (
+                        user_id BIGINT,
+                        channel_id TEXT,
+                        subscribed_at TIMESTAMPTZ DEFAULT NOW(),
+                        PRIMARY KEY (user_id, channel_id)
+                    )
+                    """
                 )
 
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS fortune_spins (\n                        spin_id TEXT PRIMARY KEY,\n                        user_id BIGINT,\n                        prize_code TEXT,\n                        created_at TIMESTAMP\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS fortune_spins (
+                        spin_id TEXT PRIMARY KEY,
+                        user_id BIGINT,
+                        prize_code TEXT,
+                        created_at TIMESTAMP
+                    )
+                    """
                 )
 
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS exchange_requests (\n                        id SERIAL PRIMARY KEY,\n                        user_id BIGINT,\n                        username TEXT,\n                        exchange_type TEXT,\n                        stars_amount INT,\n                        status TEXT DEFAULT 'new',\n                        created_at TIMESTAMP DEFAULT NOW()\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS exchange_requests (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT,
+                        username TEXT,
+                        exchange_type TEXT,
+                        stars_amount INT,
+                        status TEXT DEFAULT 'new',
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
                 )
 
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS sponsor_slots (\n                        slot_no INT PRIMARY KEY,\n                        sponsor_type TEXT NOT NULL,\n                        channel_username TEXT,\n                        order_id INT NULL,\n                        is_active BOOLEAN DEFAULT FALSE,\n                        created_at TIMESTAMP DEFAULT NOW()\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS sponsor_slots (
+                        slot_no INT PRIMARY KEY,
+                        sponsor_type TEXT NOT NULL,
+                        channel_username TEXT,
+                        order_id INT NULL,
+                        is_active BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
                 )
 
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS sponsor_orders (\n                        id SERIAL PRIMARY KEY,\n                        user_id BIGINT,\n                        username TEXT,\n                        channel_username TEXT,\n                        target_subscribers INT DEFAULT 100,\n                        counted_subscribers INT DEFAULT 0,\n                        active_subscribers INT DEFAULT 0,\n                        priority_level INT DEFAULT 0,\n                        stars_amount INT NOT NULL,\n                        status TEXT DEFAULT 'waiting_link',\n                        placed_in_slot BOOLEAN DEFAULT FALSE,\n                        created_at TIMESTAMP DEFAULT NOW(),\n                        completed_at TIMESTAMP NULL\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS sponsor_orders (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT,
+                        username TEXT,
+                        channel_username TEXT,
+                        target_subscribers INT DEFAULT 100,
+                        counted_subscribers INT DEFAULT 0,
+                        active_subscribers INT DEFAULT 0,
+                        priority_level INT DEFAULT 0,
+                        stars_amount INT NOT NULL,
+                        status TEXT DEFAULT 'waiting_link',
+                        placed_in_slot BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        completed_at TIMESTAMP NULL
+                    )
+                    """
                 )
 
                 cursor.execute(
-                    """\n                    CREATE TABLE IF NOT EXISTS sponsor_order_members (\n                        order_id INT NOT NULL,\n                        user_id BIGINT NOT NULL,\n                        counted_at TIMESTAMP DEFAULT NOW(),\n                        still_subscribed BOOLEAN DEFAULT TRUE,\n                        PRIMARY KEY (order_id, user_id)\n                    )\n                    """
+                    """
+                    CREATE TABLE IF NOT EXISTS sponsor_order_members (
+                        order_id INT NOT NULL,
+                        user_id BIGINT NOT NULL,
+                        counted_at TIMESTAMP DEFAULT NOW(),
+                        still_subscribed BOOLEAN DEFAULT TRUE,
+                        PRIMARY KEY (order_id, user_id)
+                    )
+                    """
                 )
 
                 alter_statements = [
@@ -376,9 +460,6 @@ def init_db():
                     "ALTER TABLE referrals ADD COLUMN IF NOT EXISTS inactive_since TIMESTAMP NULL",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP NULL",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_ref_count INT DEFAULT 0",
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_ref_count INT DEFAULT 0",
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_spins INT DEFAULT 0",
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_invite_bonus_paid BOOLEAN DEFAULT FALSE",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_hold_bonus_count INT DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_hold_bonus_at TIMESTAMP NULL",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_level_notified TEXT DEFAULT 'Bronze'",
@@ -402,7 +483,14 @@ def init_db():
                     print("DROP COLUMN warning:", e)
 
                 cursor.execute(
-                    """\n                    INSERT INTO sponsor_slots (slot_no, sponsor_type, is_active)\n                    VALUES\n                        (1, 'main', FALSE),\n                        (2, 'main', FALSE),\n                        (3, 'temp', FALSE)\n                    ON CONFLICT (slot_no) DO NOTHING\n                    """
+                    """
+                    INSERT INTO sponsor_slots (slot_no, sponsor_type, is_active)
+                    VALUES
+                        (1, 'main', FALSE),
+                        (2, 'main', FALSE),
+                        (3, 'temp', FALSE)
+                    ON CONFLICT (slot_no) DO NOTHING
+                    """
                 )
 
                 conn.commit()
@@ -418,11 +506,23 @@ def get_active_sponsors_sync(include_temp=True):
         with conn.cursor() as cur:
             if include_temp:
                 cur.execute(
-                    """\n                    SELECT slot_no, sponsor_type, channel_username\n                    FROM sponsor_slots\n                    WHERE is_active = TRUE AND channel_username IS NOT NULL\n                    ORDER BY slot_no\n                    """
+                    """
+                    SELECT slot_no, sponsor_type, channel_username
+                    FROM sponsor_slots
+                    WHERE is_active = TRUE AND channel_username IS NOT NULL
+                    ORDER BY slot_no
+                    """
                 )
             else:
                 cur.execute(
-                    """\n                    SELECT slot_no, sponsor_type, channel_username\n                    FROM sponsor_slots\n                    WHERE is_active = TRUE\n                      AND sponsor_type = 'main'\n                      AND channel_username IS NOT NULL\n                    ORDER BY slot_no\n                    """
+                    """
+                    SELECT slot_no, sponsor_type, channel_username
+                    FROM sponsor_slots
+                    WHERE is_active = TRUE
+                      AND sponsor_type = 'main'
+                      AND channel_username IS NOT NULL
+                    ORDER BY slot_no
+                    """
                 )
             rows = cur.fetchall()
 
@@ -446,7 +546,14 @@ async def recount_temp_order_progress(context: ContextTypes.DEFAULT_TYPE):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """\n                    SELECT order_id, channel_username\n                    FROM sponsor_slots\n                    WHERE slot_no = 3\n                      AND is_active = TRUE\n                      AND order_id IS NOT NULL\n                      AND channel_username IS NOT NULL\n                    """
+                    """
+                    SELECT order_id, channel_username
+                    FROM sponsor_slots
+                    WHERE slot_no = 3
+                      AND is_active = TRUE
+                      AND order_id IS NOT NULL
+                      AND channel_username IS NOT NULL
+                    """
                 )
                 row = cur.fetchone()
                 if not row:
@@ -461,29 +568,52 @@ async def recount_temp_order_progress(context: ContextTypes.DEFAULT_TYPE):
                     is_sub = await check_subscription(user_id, channel_username, context)
                     if is_sub:
                         cur.execute(
-                            """\n                            INSERT INTO sponsor_order_members (order_id, user_id, counted_at, still_subscribed)\n                            VALUES (%s, %s, %s, TRUE)\n                            ON CONFLICT (order_id, user_id)\n                            DO UPDATE SET still_subscribed = TRUE\n                            """,
+                            """
+                            INSERT INTO sponsor_order_members (order_id, user_id, counted_at, still_subscribed)
+                            VALUES (%s, %s, %s, TRUE)
+                            ON CONFLICT (order_id, user_id)
+                            DO UPDATE SET still_subscribed = TRUE
+                            """,
                             (order_id, user_id, utcnow()),
                         )
                     else:
                         cur.execute(
-                            """\n                            UPDATE sponsor_order_members\n                            SET still_subscribed = FALSE\n                            WHERE order_id = %s AND user_id = %s\n                            """,
+                            """
+                            UPDATE sponsor_order_members
+                            SET still_subscribed = FALSE
+                            WHERE order_id = %s AND user_id = %s
+                            """,
                             (order_id, user_id),
                         )
 
                 cur.execute(
-                    """\n                    SELECT COUNT(*)\n                    FROM sponsor_order_members\n                    WHERE order_id = %s\n                    """,
+                    """
+                    SELECT COUNT(*)
+                    FROM sponsor_order_members
+                    WHERE order_id = %s
+                    """,
                     (order_id,),
                 )
                 counted_total = int(cur.fetchone()[0] or 0)
 
                 cur.execute(
-                    """\n                    SELECT COUNT(*)\n                    FROM sponsor_order_members\n                    WHERE order_id = %s AND still_subscribed = TRUE\n                    """,
+                    """
+                    SELECT COUNT(*)
+                    FROM sponsor_order_members
+                    WHERE order_id = %s AND still_subscribed = TRUE
+                    """,
                     (order_id,),
                 )
                 active_total = int(cur.fetchone()[0] or 0)
 
                 cur.execute(
-                    """\n                    UPDATE sponsor_orders\n                    SET counted_subscribers = %s,\n                        active_subscribers = %s\n                    WHERE id = %s\n                    RETURNING target_subscribers, user_id, channel_username\n                    """,
+                    """
+                    UPDATE sponsor_orders
+                    SET counted_subscribers = %s,
+                        active_subscribers = %s
+                    WHERE id = %s
+                    RETURNING target_subscribers, user_id, channel_username
+                    """,
                     (counted_total, active_total, order_id),
                 )
                 order_row = cur.fetchone()
@@ -495,11 +625,22 @@ async def recount_temp_order_progress(context: ContextTypes.DEFAULT_TYPE):
 
                 if counted_total >= int(target_subscribers):
                     cur.execute(
-                        """\n                        UPDATE sponsor_orders\n                        SET status = 'completed',\n                            completed_at = %s\n                        WHERE id = %s\n                        """,
+                        """
+                        UPDATE sponsor_orders
+                        SET status = 'completed',
+                            completed_at = %s
+                        WHERE id = %s
+                        """,
                         (utcnow(), order_id),
                     )
                     cur.execute(
-                        """\n                        UPDATE sponsor_slots\n                        SET channel_username = NULL,\n                            order_id = NULL,\n                            is_active = FALSE\n                        WHERE slot_no = 3\n                        """
+                        """
+                        UPDATE sponsor_slots
+                        SET channel_username = NULL,
+                            order_id = NULL,
+                            is_active = FALSE
+                        WHERE slot_no = 3
+                        """
                     )
                     conn.commit()
 
@@ -544,7 +685,15 @@ async def place_next_temp_order(context: ContextTypes.DEFAULT_TYPE):
                     return
 
                 cur.execute(
-                    """\n                    SELECT id, channel_username\n                    FROM sponsor_orders\n                    WHERE status = 'approved'\n                      AND placed_in_slot = FALSE\n                      AND channel_username IS NOT NULL\n                    ORDER BY priority_level DESC, created_at ASC\n                    LIMIT 1\n                    """
+                    """
+                    SELECT id, channel_username
+                    FROM sponsor_orders
+                    WHERE status = 'approved'
+                      AND placed_in_slot = FALSE
+                      AND channel_username IS NOT NULL
+                    ORDER BY priority_level DESC, created_at ASC
+                    LIMIT 1
+                    """
                 )
                 order = cur.fetchone()
                 if not order:
@@ -553,12 +702,23 @@ async def place_next_temp_order(context: ContextTypes.DEFAULT_TYPE):
                 order_id, channel_username = order
 
                 cur.execute(
-                    """\n                    UPDATE sponsor_slots\n                    SET channel_username = %s,\n                        order_id = %s,\n                        is_active = TRUE\n                    WHERE slot_no = 3\n                    """,
+                    """
+                    UPDATE sponsor_slots
+                    SET channel_username = %s,
+                        order_id = %s,
+                        is_active = TRUE
+                    WHERE slot_no = 3
+                    """,
                     (channel_username, order_id),
                 )
 
                 cur.execute(
-                    """\n                    UPDATE sponsor_orders\n                    SET placed_in_slot = TRUE,\n                        status = 'active'\n                    WHERE id = %s\n                    """,
+                    """
+                    UPDATE sponsor_orders
+                    SET placed_in_slot = TRUE,
+                        status = 'active'
+                    WHERE id = %s
+                    """,
                     (order_id,),
                 )
                 conn.commit()
@@ -577,21 +737,20 @@ async def place_next_temp_order(context: ContextTypes.DEFAULT_TYPE):
 
 async def count_valid_refs(referrer_id: int, context: ContextTypes.DEFAULT_TYPE) -> int:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    grace_period = timedelta(days=30)
     active_count = 0
-    invited_count = 0
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT referred_id FROM referrals WHERE referrer_id=%s",
+                "SELECT referred_id, COALESCE(is_valid, FALSE), inactive_since FROM referrals WHERE referrer_id=%s",
                 (referrer_id,),
             )
             rows = cur.fetchall()
 
             main_sponsors = await get_active_sponsors(include_temp=False)
 
-            for (referred_id,) in rows:
-                invited_count += 1
+            for referred_id, was_valid, inactive_since in rows:
                 valid_now = True
 
                 if len(main_sponsors) < 2:
@@ -604,48 +763,127 @@ async def count_valid_refs(referrer_id: int, context: ContextTypes.DEFAULT_TYPE)
 
                 if valid_now:
                     cur.execute(
-                        """\n                        UPDATE referrals\n                        SET is_valid = TRUE,\n                            checked_at = %s,\n                            inactive_since = NULL\n                        WHERE referrer_id = %s AND referred_id = %s\n                        """,
+                        """
+                        UPDATE referrals
+                        SET is_valid = TRUE,
+                            checked_at = %s,
+                            inactive_since = NULL
+                        WHERE referrer_id = %s AND referred_id = %s
+                        """,
                         (now, referrer_id, referred_id),
                     )
                     active_count += 1
                 else:
-                    cur.execute(
-                        """\n                        UPDATE referrals\n                        SET is_valid = FALSE,\n                            checked_at = %s\n                        WHERE referrer_id = %s AND referred_id = %s\n                        """,
-                        (now, referrer_id, referred_id),
-                    )
+                    if was_valid:
+                        inactive_since_naive = to_naive_utc(inactive_since)
+
+                        if inactive_since_naive is None:
+                            cur.execute(
+                                """
+                                UPDATE referrals
+                                SET checked_at = %s,
+                                    inactive_since = %s
+                                WHERE referrer_id = %s AND referred_id = %s
+                                """,
+                                (now, now, referrer_id, referred_id),
+                            )
+                            active_count += 1
+                        elif (now - inactive_since_naive) < grace_period:
+                            cur.execute(
+                                """
+                                UPDATE referrals
+                                SET checked_at = %s
+                                WHERE referrer_id = %s AND referred_id = %s
+                                """,
+                                (now, referrer_id, referred_id),
+                            )
+                            active_count += 1
+                        else:
+                            cur.execute(
+                                """
+                                UPDATE referrals
+                                SET checked_at = %s
+                                WHERE referrer_id = %s AND referred_id = %s
+                                """,
+                                (now, referrer_id, referred_id),
+                            )
+                    else:
+                        cur.execute(
+                            """
+                            UPDATE referrals
+                            SET checked_at = %s
+                            WHERE referrer_id = %s AND referred_id = %s
+                            """,
+                            (now, referrer_id, referred_id),
+                        )
 
             cur.execute(
-                """\n                UPDATE users\n                SET active_ref_count = %s,\n                    invited_ref_count = %s\n                WHERE user_id = %s\n                RETURNING COALESCE(first_invite_bonus_paid, FALSE)\n                """,
-                (active_count, invited_count, referrer_id),
+                "UPDATE users SET active_ref_count = %s WHERE user_id = %s",
+                (active_count, referrer_id),
             )
-            row = cur.fetchone()
-            first_bonus_paid = bool(row[0]) if row else False
 
-            if invited_count >= 1 and not first_bonus_paid:
+            activation_reward_granted = False
+            activation_reward_amount = 10
+
+            if active_count >= 2:
                 cur.execute(
-                    """\n                    UPDATE users\n                    SET tickets = COALESCE(tickets, 0) + %s,\n                        activation_bonus_percent = CASE\n                            WHEN COALESCE(activation_bonus_percent, 0) < %s THEN %s\n                            ELSE activation_bonus_percent\n                        END,\n                        first_invite_bonus_paid = TRUE\n                    WHERE user_id = %s\n                    """,
-                    (
-                        FIRST_INVITED_FRIEND_BONUS,
-                        FIRST_INVITED_FRIEND_BONUS_PERCENT,
-                        FIRST_INVITED_FRIEND_BONUS_PERCENT,
-                        referrer_id,
-                    ),
+                    """
+                    UPDATE users
+                    SET activated = TRUE,
+                        activation_bonus_percent = CASE
+                            WHEN COALESCE(activation_bonus_percent, 0) < 5 THEN 5
+                            ELSE activation_bonus_percent
+                        END,
+                        tickets = CASE
+                            WHEN COALESCE(activated, FALSE) = FALSE
+                             AND COALESCE(activation_reward_paid, FALSE) = FALSE
+                            THEN COALESCE(tickets, 0) + CASE
+                                WHEN created_at IS NOT NULL AND (%s - created_at) <= INTERVAL '3 days' THEN 20
+                                ELSE 10
+                            END
+                            ELSE COALESCE(tickets, 0)
+                        END,
+                        activation_reward_paid = CASE
+                            WHEN COALESCE(activated, FALSE) = FALSE
+                             AND COALESCE(activation_reward_paid, FALSE) = FALSE
+                            THEN TRUE
+                            ELSE COALESCE(activation_reward_paid, FALSE)
+                        END
+                    WHERE user_id = %s
+                    RETURNING
+                        CASE
+                            WHEN COALESCE(activated, FALSE) = FALSE
+                             AND COALESCE(activation_reward_paid, FALSE) = FALSE
+                            THEN TRUE
+                            ELSE FALSE
+                        END,
+                        CASE
+                            WHEN created_at IS NOT NULL AND (%s - created_at) <= INTERVAL '3 days' THEN 20
+                            ELSE 10
+                        END
+                    """,
+                    (now, referrer_id, now),
                 )
-                conn.commit()
-                try:
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text=(
-                            "🎉 <b>Поздравляем!</b>\n\n"
-                            f"Вы пригласили первого друга и получили <b>+{FIRST_INVITED_FRIEND_BONUS}⭐</b> "
-                            f"и <b>+{FIRST_INVITED_FRIEND_BONUS_PERCENT}%</b> к шансу звёздных секторов."
-                        ),
-                        parse_mode=ParseMode.HTML,
-                    )
-                except Exception as e:
-                    print("first invite reward notify error:", e)
-            else:
-                conn.commit()
+                activation_row = cur.fetchone()
+                if activation_row:
+                    activation_reward_granted = bool(activation_row[0])
+                    activation_reward_amount = int(activation_row[1])
+
+            conn.commit()
+
+    if active_count >= 2 and activation_reward_granted:
+        try:
+            await context.bot.send_message(
+                chat_id=referrer_id,
+                text=(
+                    "🎉 <b>Поздравляем!</b>\n\n"
+                    f"Вы выполнили условие активации Звёздного Колеса и получили <b>+{activation_reward_amount}⭐</b>\n"
+                    "Теперь вам доступно бесплатное вращение каждые 6 часов."
+                ),
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception as e:
+            print("activation reward notify error:", e)
 
     return active_count
 
@@ -669,7 +907,11 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 with get_db_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            """\n                            INSERT INTO channel_subscriptions (user_id, channel_id)\n                            VALUES (%s, %s)\n                            ON CONFLICT DO NOTHING\n                            """,
+                            """
+                            INSERT INTO channel_subscriptions (user_id, channel_id)
+                            VALUES (%s, %s)
+                            ON CONFLICT DO NOTHING
+                            """,
                             (user_id, ch),
                         )
                         conn.commit()
@@ -687,14 +929,22 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 "UPDATE users SET all_subscribed = %s WHERE user_id = %s",
                 (1 if all_subs_ok else 0, user_id),
             )
-            main_sponsors = [s for s in sponsors if s["sponsor_type"] == "main"]
-            should_activate = all_subs_ok and len(main_sponsors) >= 2
             cur.execute(
-                """\n                UPDATE users\n                SET activated = %s\n                WHERE user_id = %s\n                """,
-                (should_activate, user_id),
-            )
-            cur.execute(
-                """\n                SELECT\n                    COALESCE(activated, FALSE),\n                    COALESCE(active_ref_count, 0),\n                    COALESCE(invited_ref_count, 0),\n                    COALESCE(tickets, 0),\n                    COALESCE(weekly_hold_bonus_count, 0),\n                    last_fortune_time,\n                    COALESCE(last_level_notified, 'Bronze'),\n                    COALESCE(activation_bonus_percent, 0),\n                    COALESCE(boost_percent, 0),\n                    COALESCE(boost_spins_left, 0),\n                    COALESCE(welcome_spin_used, FALSE)\n                FROM users\n                WHERE user_id = %s\n                """,
+                """
+                SELECT
+                    COALESCE(activated, FALSE),
+                    COALESCE(active_ref_count, 0),
+                    COALESCE(tickets, 0),
+                    COALESCE(weekly_hold_bonus_count, 0),
+                    last_fortune_time,
+                    COALESCE(last_level_notified, 'Bronze'),
+                    COALESCE(activation_bonus_percent, 0),
+                    COALESCE(boost_percent, 0),
+                    COALESCE(boost_spins_left, 0),
+                    COALESCE(welcome_spin_used, FALSE)
+                FROM users
+                WHERE user_id = %s
+                """,
                 (user_id,),
             )
             row = cur.fetchone()
@@ -702,7 +952,6 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 
     activated = False
     ref_count = 0
-    invited_ref_count = 0
     stars = 0
     weekly_hold_bonus_count = 0
     last_fortune_time = None
@@ -716,7 +965,6 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         (
             activated,
             ref_count,
-            invited_ref_count,
             stars,
             weekly_hold_bonus_count,
             last_fortune_time,
@@ -739,7 +987,6 @@ async def get_user_state(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         "all_subs_ok": all_subs_ok,
         "channels_list": channels_list,
         "ref_count": ref_count,
-        "invited_ref_count": invited_ref_count,
         "stars": stars,
         "weekly_hold_bonus_count": weekly_hold_bonus_count,
         "last_fortune_time": to_naive_utc(last_fortune_time),
@@ -794,7 +1041,11 @@ async def apply_inactivity_decay(user_id: int, context):
     def _apply():
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""\n                    SELECT COALESCE(tickets, 0), last_active_at\n                    FROM users\n                    WHERE user_id = %s\n                """, (user_id,))
+                cur.execute("""
+                    SELECT COALESCE(tickets, 0), last_active_at
+                    FROM users
+                    WHERE user_id = %s
+                """, (user_id,))
                 row = cur.fetchone()
 
                 if not row:
@@ -804,7 +1055,11 @@ async def apply_inactivity_decay(user_id: int, context):
                 tickets = int(tickets or 0)
 
                 if last_active_at is None:
-                    cur.execute("""\n                        UPDATE users\n                        SET last_active_at = %s\n                        WHERE user_id = %s\n                    """, (now, user_id))
+                    cur.execute("""
+                        UPDATE users
+                        SET last_active_at = %s
+                        WHERE user_id = %s
+                    """, (now, user_id))
                     conn.commit()
                     return {"decayed": 0, "new_balance": tickets}
 
@@ -818,9 +1073,18 @@ async def apply_inactivity_decay(user_id: int, context):
                     new_balance = max(150, tickets - penalty)
                     decayed = tickets - new_balance
 
-                    cur.execute("""\n                        UPDATE users\n                        SET tickets = %s,\n                            last_active_at = %s\n                        WHERE user_id = %s\n                    """, (new_balance, now, user_id))
+                    cur.execute("""
+                        UPDATE users
+                        SET tickets = %s,
+                            last_active_at = %s
+                        WHERE user_id = %s
+                    """, (new_balance, now, user_id))
                 else:
-                    cur.execute("""\n                        UPDATE users\n                        SET last_active_at = %s\n                        WHERE user_id = %s\n                    """, (now, user_id))
+                    cur.execute("""
+                        UPDATE users
+                        SET last_active_at = %s
+                        WHERE user_id = %s
+                    """, (now, user_id))
 
                 conn.commit()
                 return {"decayed": decayed, "new_balance": new_balance}
@@ -841,7 +1105,13 @@ async def process_weekly_hold_bonus(user_id: int, context: ContextTypes.DEFAULT_
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """\n                SELECT\n                    COALESCE(weekly_hold_bonus_count, 0),\n                    last_hold_bonus_at\n                FROM users\n                WHERE user_id = %s\n                """,
+                """
+                SELECT
+                    COALESCE(weekly_hold_bonus_count, 0),
+                    last_hold_bonus_at
+                FROM users
+                WHERE user_id = %s
+                """,
                 (user_id,),
             )
             row = cur.fetchone()
@@ -860,7 +1130,13 @@ async def process_weekly_hold_bonus(user_id: int, context: ContextTypes.DEFAULT_
                 return False, "Бонус уже начислялся меньше недели назад"
 
             cur.execute(
-                """\n                UPDATE users\n                SET tickets = tickets + %s,\n                    weekly_hold_bonus_count = weekly_hold_bonus_count + 1,\n                    last_hold_bonus_at = %s\n                WHERE user_id = %s\n                """,
+                """
+                UPDATE users
+                SET tickets = tickets + %s,
+                    weekly_hold_bonus_count = weekly_hold_bonus_count + 1,
+                    last_hold_bonus_at = %s
+                WHERE user_id = %s
+                """,
                 (WEEKLY_HOLD_BONUS, now, user_id),
             )
             conn.commit()
@@ -895,37 +1171,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if not exists:
                 cur.execute(
-                    """\n                    INSERT INTO users (user_id, username, first_name, referrer_id, tickets, last_seen)\n                    VALUES (%s, %s, %s, %s, %s, %s)\n                    """,
+                    """
+                    INSERT INTO users (user_id, username, first_name, referrer_id, tickets, last_seen)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
                     (user_id, username, first_name, referrer_id, START_BONUS, utcnow()),
                 )
 
                 if referrer_id:
                     cur.execute(
-                        """\n                        INSERT INTO referrals (referrer_id, referred_id, is_valid, checked_at)\n                        VALUES (%s, %s, FALSE, NULL)\n                        ON CONFLICT (referrer_id, referred_id) DO NOTHING\n                        """,
+                        """
+                        INSERT INTO referrals (referrer_id, referred_id, is_valid, checked_at)
+                        VALUES (%s, %s, FALSE, NULL)
+                        ON CONFLICT (referrer_id, referred_id) DO NOTHING
+                        """,
                         (referrer_id, user_id),
                     )
             else:
                 cur.execute(
-                    """\n                    SELECT referrer_id\n                    FROM users\n                    WHERE user_id = %s\n                    """,
-                    (user_id,),
+                    """
+                    UPDATE users
+                    SET username = %s,
+                        first_name = %s,
+                        last_seen = %s
+                    WHERE user_id = %s
+                    """,
+                    (username, first_name, utcnow(), user_id),
                 )
-                row = cur.fetchone()
-                current_referrer_id = row[0] if row else None
-
-                if current_referrer_id is None and referrer_id:
-                    cur.execute(
-                        """\n                        UPDATE users\n                        SET username = %s,\n                            first_name = %s,\n                            last_seen = %s,\n                            referrer_id = %s\n                        WHERE user_id = %s\n                        """,
-                        (username, first_name, utcnow(), referrer_id, user_id),
-                    )
-                    cur.execute(
-                        """\n                        INSERT INTO referrals (referrer_id, referred_id, is_valid, checked_at)\n                        VALUES (%s, %s, FALSE, NULL)\n                        ON CONFLICT (referrer_id, referred_id) DO NOTHING\n                        """,
-                        (referrer_id, user_id),
-                    )
-                else:
-                    cur.execute(
-                        """\n                        UPDATE users\n                        SET username = %s,\n                            first_name = %s,\n                            last_seen = %s\n                        WHERE user_id = %s\n                        """,
-                        (username, first_name, utcnow(), user_id),
-                    )
 
             conn.commit()
 
@@ -984,7 +1256,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = query.from_user.id
         data = query.data
 
-        if data in ("check_sub", "check_subs", "back_to_main"):
+        if data in ("check_sub", "back_to_main"):
             try:
                 await query.edit_message_text(
                     "⏳ <b>Идёт обновление...</b>",
@@ -1056,11 +1328,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboard,
             )
 
-        elif data in ("show_invite", "my_ref_link"):
+        elif data == "show_invite":
             await query.edit_message_text(
                 build_invite_text(uid),
                 parse_mode=ParseMode.HTML,
-                reply_markup=get_invite_inline(uid),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]]
+                ),
             )
 
         elif data == "exchange":
@@ -1114,7 +1388,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     new_balance = int(cur.fetchone()[0])
 
                     cur.execute(
-                        """\n                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)\n                        VALUES (%s, %s, %s, %s)\n                        """,
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
                         (uid, query.from_user.username, "premium_3m", PREMIUM_COST),
                     )
                     conn.commit()
@@ -1170,7 +1447,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     new_balance = int(cur.fetchone()[0])
 
                     cur.execute(
-                        """\n                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)\n                        VALUES (%s, %s, %s, %s)\n                        """,
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
                         (uid, query.from_user.username, "withdraw", WITHDRAW_MIN),
                     )
                     conn.commit()
@@ -1244,13 +1524,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """\n                        UPDATE users\n                        SET\n                            tickets = tickets - %s,\n                            boost_percent = %s,\n                            boost_spins_left = %s\n                        WHERE user_id = %s\n                        RETURNING tickets\n                        """,
+                        """
+                        UPDATE users
+                        SET
+                            tickets = tickets - %s,
+                            boost_percent = %s,
+                            boost_spins_left = %s
+                        WHERE user_id = %s
+                        RETURNING tickets
+                        """,
                         (boost_cost, boost_percent, boost_spins, uid),
                     )
                     new_balance = int(cur.fetchone()[0])
 
                     cur.execute(
-                        """\n                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)\n                        VALUES (%s, %s, %s, %s)\n                        """,
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
                         (uid, query.from_user.username, exchange_type, boost_cost),
                     )
                     conn.commit()
@@ -1293,13 +1584,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     new_balance = int(cur.fetchone()[0])
 
                     cur.execute(
-                        """\n                        INSERT INTO sponsor_orders (\n                            user_id, username, target_subscribers, counted_subscribers,\n                            active_subscribers, priority_level, stars_amount, status, placed_in_slot\n                        )\n                        VALUES (%s, %s, %s, 0, 0, %s, %s, 'waiting_link', FALSE)\n                        RETURNING id\n                        """,
+                        """
+                        INSERT INTO sponsor_orders (
+                            user_id, username, target_subscribers, counted_subscribers,
+                            active_subscribers, priority_level, stars_amount, status, placed_in_slot
+                        )
+                        VALUES (%s, %s, %s, 0, 0, %s, %s, 'waiting_link', FALSE)
+                        RETURNING id
+                        """,
                         (uid, query.from_user.username, 100, priority_level, stars_cost),
                     )
                     order_id = int(cur.fetchone()[0])
 
                     cur.execute(
-                        """\n                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)\n                        VALUES (%s, %s, %s, %s)\n                        """,
+                        """
+                        INSERT INTO exchange_requests (user_id, username, exchange_type, stars_amount)
+                        VALUES (%s, %s, %s, %s)
+                        """,
                         (
                             uid,
                             query.from_user.username,
@@ -1376,7 +1677,12 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """\n                    UPDATE sponsor_orders\n                    SET channel_username = %s,\n                        status = 'approved'\n                    WHERE id = %s AND user_id = %s\n                    """,
+                    """
+                    UPDATE sponsor_orders
+                    SET channel_username = %s,
+                        status = 'approved'
+                    WHERE id = %s AND user_id = %s
+                    """,
                     (channel_username, waiting_order_id, uid),
                 )
                 conn.commit()
@@ -1406,10 +1712,10 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             (
                 f"🔒 <b>Профиль пока недоступен</b>\n\n"
-                f"Профиль откроется после подписки на активных спонсоров.\n\n"
-                f"Чтобы открыть доступ:\n"
-                f"1️⃣ Подпишитесь на 2 основных спонсоров\n"
-                f"2️⃣ Если есть временный спонсор — подпишитесь и на него\n"
+                f"Профиль откроется после активации Звёздного Колеса.\n\n"
+                f"Для активации:\n"
+                f"1️⃣ Подпишитесь на всех активных спонсоров\n"
+                f"2️⃣ Пригласите 2 активных друзей\n"
                 f"3️⃣ Нажмите <b>«Обновить статус»</b>"
             ),
             parse_mode=ParseMode.HTML,
@@ -1423,9 +1729,10 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             (
                 f"🔒 <b>Звёздное Колесо пока недоступно</b>\n\n"
-                f"Чтобы открыть доступ, выполните условия:\n"
-                f"• Подписки на спонсоров: <b>{subs_status}</b>\n\n"
-                f"После подписки нажмите <b>«Обновить статус»</b> на главном экране."
+                f"Чтобы открыть доступ, нужно выполнить условия:\n"
+                f"• Подписки на спонсоров: <b>{subs_status}</b>\n"
+                f"• Активные друзья: <b>{state['ref_count']}/2</b>\n\n"
+                f"После выполнения условий нажмите <b>«Обновить статус»</b> на главном экране."
             ),
             parse_mode=ParseMode.HTML,
         )
@@ -1436,9 +1743,9 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             (
                 f"🔒 <b>Обмен звёзд пока недоступен</b>\n\n"
                 f"Сначала откройте Звёздное Колесо:\n"
-                f"1️⃣ Подпишитесь на 2 основных спонсоров\n"
-                f"2️⃣ Если есть временный спонсор — подпишитесь и на него\n\n"
-                f"После открытия Колеса раздел обмена станет доступен."
+                f"1️⃣ Подпишитесь на всех активных спонсоров\n"
+                f"2️⃣ Пригласите 2 активных друзей\n\n"
+                f"После активации Колеса раздел обмена станет доступен."
             ),
             parse_mode=ParseMode.HTML,
         )
@@ -1457,9 +1764,9 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             (
                 f"🔒 <b>Помощь пока недоступна</b>\n\n"
-                f"Сначала откройте Звёздное Колесо:\n"
-                f"1️⃣ Подпишитесь на 2 основных спонсоров\n"
-                f"2️⃣ Если есть временный спонсор — подпишитесь и на него\n"
+                f"Сначала активируйте Звёздное Колесо:\n"
+                f"1️⃣ Подпишитесь на всех активных спонсоров\n"
+                f"2️⃣ Пригласите 2 активных друзей\n"
                 f"3️⃣ Нажмите <b>«Обновить статус»</b>"
             ),
             parse_mode=ParseMode.HTML,
@@ -1484,7 +1791,12 @@ async def text_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """\n                        SELECT first_name, username, COALESCE(tickets, 0) AS stars\n                        FROM users\n                        ORDER BY stars DESC, user_id ASC\n                        LIMIT 10\n                        """
+                        """
+                        SELECT first_name, username, COALESCE(tickets, 0) AS stars
+                        FROM users
+                        ORDER BY stars DESC, user_id ASC
+                        LIMIT 10
+                        """
                     )
                     rows = cur.fetchall()
 
@@ -1530,7 +1842,20 @@ async def sponsor_slots_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """\n                    SELECT\n                        s.slot_no,\n                        s.sponsor_type,\n                        s.channel_username,\n                        s.order_id,\n                        s.is_active,\n                        o.target_subscribers,\n                        o.counted_subscribers,\n                        o.active_subscribers\n                    FROM sponsor_slots s\n                    LEFT JOIN sponsor_orders o ON o.id = s.order_id\n                    ORDER BY s.slot_no\n                    """
+                    """
+                    SELECT
+                        s.slot_no,
+                        s.sponsor_type,
+                        s.channel_username,
+                        s.order_id,
+                        s.is_active,
+                        o.target_subscribers,
+                        o.counted_subscribers,
+                        o.active_subscribers
+                    FROM sponsor_slots s
+                    LEFT JOIN sponsor_orders o ON o.id = s.order_id
+                    ORDER BY s.slot_no
+                    """
                 )
                 rows = cur.fetchall()
 
@@ -1565,7 +1890,19 @@ async def sponsor_queue_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """\n                    SELECT id, username, channel_username, priority_level, stars_amount, status, created_at\n                    FROM sponsor_orders\n                    WHERE status IN ('waiting_link', 'approved', 'active')\n                    ORDER BY\n                        CASE\n                            WHEN status = 'active' THEN 0\n                            WHEN status = 'approved' THEN 1\n                            ELSE 2\n                        END,\n                        priority_level DESC,\n                        created_at ASC\n                    """
+                    """
+                    SELECT id, username, channel_username, priority_level, stars_amount, status, created_at
+                    FROM sponsor_orders
+                    WHERE status IN ('waiting_link', 'approved', 'active')
+                    ORDER BY
+                        CASE
+                            WHEN status = 'active' THEN 0
+                            WHEN status = 'approved' THEN 1
+                            ELSE 2
+                        END,
+                        priority_level DESC,
+                        created_at ASC
+                    """
                 )
                 rows = cur.fetchall()
 
@@ -1613,7 +1950,13 @@ async def set_main_sponsor_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """\n                    UPDATE sponsor_slots\n                    SET channel_username = %s,\n                        is_active = TRUE,\n                        order_id = NULL\n                    WHERE slot_no = %s\n                    """,
+                    """
+                    UPDATE sponsor_slots
+                    SET channel_username = %s,
+                        is_active = TRUE,
+                        order_id = NULL
+                    WHERE slot_no = %s
+                    """,
                     (channel_username, slot_no),
                 )
                 conn.commit()
@@ -1638,12 +1981,23 @@ async def remove_temp_sponsor_cmd(update: Update, context: ContextTypes.DEFAULT_
 
                 if order_id:
                     cur.execute(
-                        """\n                        UPDATE sponsor_orders\n                        SET status = 'completed',\n                            completed_at = %s\n                        WHERE id = %s\n                        """,
+                        """
+                        UPDATE sponsor_orders
+                        SET status = 'completed',
+                            completed_at = %s
+                        WHERE id = %s
+                        """,
                         (utcnow(), order_id),
                     )
 
                 cur.execute(
-                    """\n                    UPDATE sponsor_slots\n                    SET channel_username = NULL,\n                        order_id = NULL,\n                        is_active = FALSE\n                    WHERE slot_no = 3\n                    """
+                    """
+                    UPDATE sponsor_slots
+                    SET channel_username = NULL,
+                        order_id = NULL,
+                        is_active = FALSE
+                    WHERE slot_no = 3
+                    """
                 )
                 conn.commit()
 
@@ -1787,15 +2141,15 @@ def get_level_progress_data(ref_count: int):
 
     if level["name"] == "Bronze":
         base = 0
-        target = 4
+        target = 5
         current_in_level = ref_count
     elif level["name"] == "Silver":
-        base = 4
-        target = 8
+        base = 5
+        target = 10
         current_in_level = ref_count - base
     elif level["name"] == "Gold":
-        base = 8
-        target = 12
+        base = 10
+        target = 15
         current_in_level = ref_count - base
     else:
         return {
@@ -1894,31 +2248,23 @@ async def build_sponsors_text_and_keyboard(context: ContextTypes.DEFAULT_TYPE):
 
 def build_invite_text(user_id: int):
     reflink = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
-    share_text = f"Здесь можно получать звёзды и обменивать их на призы ⭐\n\nМоя ссылка: {reflink}"
     return (
         "📨 <b>Ваша ссылка для приглашения</b>\n\n"
         f"<code>{reflink}</code>\n\n"
-        "👥 <b>Как считаются друзья:</b>\n"
-        "• Приглашённый друг — просто зашёл по вашей ссылке и запустил бота\n"
-        "• Активный друг — подписался на 2 основных спонсоров\n\n"
-        f"📤 <b>Текст для отправки:</b>\n<code>{share_text}</code>"
+        "📌 <b>Активный друг</b> — это пользователь, который:\n"
+        "• перешёл по вашей ссылке\n"
+        "• подписался на 2 основных спонсорских канала"
     )
-
-def get_invite_inline(user_id: int):
-    reflink = f"https://t.me/{BOT_USERNAME_FOR_REFLINK}?start={user_id}"
-    share_text = f"Здесь можно получать звёзды и обменивать их на призы ⭐\n\nМоя ссылка: {reflink}"
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📤 Поделиться ссылкой", switch_inline_query=share_text)],
-        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")],
-    ])
-
 
 async def get_welcome_start_text(user_id, first_name, context):
     state = await get_user_state(user_id, context)
     return (
         f"👋 <b>Привет, {first_name}!</b>\n\n"
-        f"Тебе уже доступен <b>приветственный спин</b> 🎁\n\n"
-        f"Забирай первые звёзды прямо сейчас и запускай Колесо 👇\n\n"
+        f"В <b>StarEarn</b> основной источник звёзд — это\n"
+        f"🌠 <b>Звёздное Колесо</b>\n\n"
+        f"На первый запуск вам уже доступен\n"
+        f"🎁 <b>приветственный спин</b>\n\n"
+        f"Попробуйте прямо сейчас и получите свои первые звёзды 👇\n\n"
         f"⭐ <b>Баланс:</b> {state['stars']}"
     )
 
@@ -1972,16 +2318,20 @@ async def get_start_text(user_id, first_name, context):
 
         return (
             f"👋 <b>Привет, {first_name}!</b>\n\n"
-            f"После подписки на 2 основных спонсоров <b>Колесо откроется сразу</b> ✅\n\n"
-            f"⭐ <b>Баланс:</b> {state['stars']}\n\n"
-            f"📌 <b>Текущий статус:</b>\n"
+            f"Крути <b>Звёздное Колесо</b> — выигрывай звёзды ⭐\n"
+            f"Звёзды меняй на призы: Premium, вывод, продвижение канала!\n\n"
+            f"⭐ <b>Баланс:</b> {state['stars']}\n"
+            f"🎁 <b>Стартовый бонус:</b> +{START_BONUS}⭐ уже начислен на баланс\n\n"
+            f"🚀 <b>Как начать за 3 шага:</b>\n"
+            f"1️⃣ Подпишись на каналы спонсоров ✅\n"
+            f"2️⃣ Пригласи 2 друзей по своей ссылке\n"
+            f"3️⃣ Нажми <b>«Обновить статус»</b>\n\n"
+            f"🎁 <b>Бонус новичка:</b> пригласи 2 активных друзей в течение 3 дней и получи <b>+20⭐</b> вместо <b>+10⭐</b>\n\n"
+            f"📌 <b>Ваш текущий статус:</b>\n"
             f"• Подписки: <b>{subs_status}</b>\n"
+            f"• Активные друзья: <b>{state['ref_count']}/2</b>\n"
             f"• Статус колеса: <b>🔒 не активировано</b>\n\n"
-            f"🎁 <b>Что будет после активации:</b>\n"
-            f"• Бесплатное вращение каждые 6 часов\n"
-            f"• Возможность копить звёзды и обменивать их на призы\n\n"
-            f"👥 <b>Бонус за первого приглашённого друга:</b> +{FIRST_INVITED_FRIEND_BONUS}⭐ и +{FIRST_INVITED_FRIEND_BONUS_PERCENT}% к шансу\n\n"
-            f"После подписки нажмите <b>«Обновить статус»</b> 👇"
+            f"Нажмите <b>«Обновить статус»</b> после выполнения условий 👇"
         )
 
     progress = get_level_progress_data(state["ref_count"])
@@ -1994,26 +2344,25 @@ async def get_start_text(user_id, first_name, context):
 
     return (
         f"👋 <b>Привет, {first_name}!</b>\n\n"
-        f"✅ <b>Колесо открыто</b>\n"
-        f"Теперь можно крутить его каждые 6 часов, получать звёзды и усиливать шанс через друзей ⭐\n\n"
+        f"✅ <b>Звёздное Колесо уже активировано</b>\n"
+        f"Теперь твоя задача — <b>повышать уровень, увеличивать бонус и зарабатывать больше звёзд</b> ⭐\n\n"
         f"⭐ <b>Баланс:</b> {state['stars']}\n\n"
         f"🚀 <b>Что делать сейчас:</b>\n"
         f"1️⃣ Крути <b>Звёздное Колесо</b> и собирай звёзды\n"
-        f"2️⃣ Приглашай друзей и повышай уровень\n"
+        f"2️⃣ Приглашай новых <b>активных друзей</b> и повышай уровень\n"
         f"3️⃣ Используй звёзды на <b>бусты, обмен и продвижение</b>\n\n"
         f"💡 <b>Как зарабатывать больше:</b>\n"
         f"• Бесплатное вращение — 1 раз в 6 часов\n"
         f"• Начисление каждую неделю по {WEEKLY_HOLD_BONUS}⭐ (если не отписались от спонсоров)\n"
         f"• Чем выше уровень, тем выше шанс выпадения звёздных секторов\n\n"
         f"📌 <b>Активные спонсоры:</b>\n{state['channels_list']}\n"
-        f"👥 <b>Приглашённые друзья:</b> {state['invited_ref_count']}\n"
-        f"✅ <b>Активные друзья:</b> {state['ref_count']}\n"
+        f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
         f"🔗 <b>Ваша ссылка для приглашения друзей:</b>\n"
         f"<code>{reflink}</code>\n\n"
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
         f"{progress['progress_bar']} {progress['remaining_text']}\n"
-        f"✨ <b>Бонус за первого друга:</b> +{state['activation_bonus_percent']}%\n"
+        f"✨ <b>Бонус за активацию:</b> +{state['activation_bonus_percent']}%\n"
         f"🏅 <b>Бонус уровня:</b> +{state['level']['bonus_percent']}%\n"
         f"🌠 <b>Буст:</b> "
         f"{('+' + str(state['boost_percent']) + '% (осталось ' + str(state['boost_spins_left']) + ' спина)') if state['boost_spins_left'] > 0 else 'нет'}\n"
@@ -2037,14 +2386,13 @@ async def show_profile(query_or_update, user_id: int, first_name: str, context: 
         f"⭐ <b>Баланс:</b> {state['stars']}\n"
         f"🎁 <b>Недельных бонусов получено:</b> "
         f"{state['weekly_hold_bonus_count']}/{MAX_WEEKLY_HOLD_BONUSES}\n\n"
-        f"👥 <b>Приглашённые друзья:</b> {state['invited_ref_count']}\n"
-        f"✅ <b>Активные друзья:</b> {state['ref_count']}\n"
+        f"👥 <b>Активные друзья:</b> {state['ref_count']}\n"
         f"🔗 <b>Ваша ссылка для приглашения друзей:</b>\n"
         f"<code>{reflink}</code>\n\n"
         f"🏅 <b>Уровень:</b> {state['level']['emoji']} {state['level']['name']}\n"
         f"{progress['progress_label']}\n"
         f"{progress['progress_bar']} {progress['remaining_text']}\n"
-        f"✨ <b>Бонус за первого друга:</b> +{state['activation_bonus_percent']}%\n"
+        f"✨ <b>Бонус за активацию:</b> +{state['activation_bonus_percent']}%\n"
         f"🏅 <b>Бонус уровня:</b> +{state['level']['bonus_percent']}%\n"
         f"🌠 <b>Буст:</b> "
         f"{('+' + str(state['boost_percent']) + '% (осталось ' + str(state['boost_spins_left']) + ' спина)') if state['boost_spins_left'] > 0 else 'нет'}\n"
@@ -2103,7 +2451,11 @@ async def reset_weekly_hold_bonuses_cmd(update: Update, context: ContextTypes.DE
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """\n                    UPDATE users\n                    SET weekly_hold_bonus_count = 0,\n                        last_hold_bonus_at = NULL\n                    """
+                    """
+                    UPDATE users
+                    SET weekly_hold_bonus_count = 0,
+                        last_hold_bonus_at = NULL
+                    """
                 )
                 conn.commit()
 
