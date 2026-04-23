@@ -318,7 +318,7 @@ def send_post_welcome_message(user_id: int, stars: int):
         "🎉 <b>Приветственный спин получен!</b>\n\n"
         "Теперь откройте полный путь к <b>Звёздному Колесу</b>:\n"
         "1. Подпишитесь на спонсоров\n"
-        "2. Нажмите «Обновить статус» после подписки\n"
+        "2. Пригласите 2 активных друзей\n"
         "3. Нажмите <b>«Обновить статус»</b>\n\n"
         f"⭐ <b>Баланс:</b> {stars}"
     )
@@ -326,8 +326,8 @@ def send_post_welcome_message(user_id: int, stars: int):
     reply_markup = {
         "inline_keyboard": [
             [{"text": "📢 Подписаться на спонсоров", "callback_data": "show_sponsors"}],
-            [{"text": "📨 Моя ссылка", "callback_data": "show_invite"}],
-            [{"text": "🔄 Обновить статус", "callback_data": "check_sub"}],
+            [{"text": "📨 Моя ссылка", "callback_data": "my_ref_link"}],
+            [{"text": "🔄 Обновить статус", "callback_data": "check_subs"}],
         ]
     }
 
@@ -552,7 +552,7 @@ def is_can_spin():
                         "spin_cost": SPIN_COST_STARS,
                         "stars": state["stars"],
                         "reason": "not_activated",
-                        "message": "Подпишитесь на 2 основных спонсоров для открытия Звёздного Колеса.",
+                        "message": "Пригласите 2 активных реферала для открытия Звёздного Колеса.",
                         "level": level["name"],
                         "level_emoji": level["emoji"],
                         "bonus_percent": level["bonus_percent"],
@@ -697,7 +697,7 @@ def buy_spin():
                         "ok": True,
                         "success": False,
                         "error": "not_activated",
-                        "message": "Колесо ещё не активировано. Подпишитесь на 2 основных спонсоров и обновите статус.",
+                        "message": "Нет 2 активных рефералов.",
                         "stars": state["stars"],
                         "spin_cost": SPIN_COST_STARS,
                     }
@@ -797,7 +797,7 @@ def spin():
                     {
                         "ok": False,
                         "error": "not_activated",
-                        "message": "Колесо ещё не активировано. Подпишитесь на 2 основных спонсоров и обновите статус.",
+                        "message": "Не выполнено условие по 2 активным рефералам.",
                     }
                 ), 200
 
