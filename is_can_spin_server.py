@@ -180,21 +180,21 @@ def resolve_webapp_user_id():
 
 
 def get_level_info(ref_count: int):
-    if ref_count >= 15:
+    if ref_count >= 12:
         return {
             "name": "Diamond",
-            "emoji": "🌟",
+            "emoji": "💎",
             "bonus_percent": 80,
             "multiplier": 1.80,
         }
-    if ref_count >= 10:
+    if ref_count >= 8:
         return {
             "name": "Gold",
             "emoji": "🥇",
             "bonus_percent": 45,
             "multiplier": 1.45,
         }
-    if ref_count >= 5:
+    if ref_count >= 4:
         return {
             "name": "Silver",
             "emoji": "🥈",

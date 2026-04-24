@@ -337,7 +337,7 @@
           spinBtn.disabled = true;
         } else if (check.reason === "not_activated") {
           statusLine.textContent = "🔄 Статус: нет доступа";
-          statusBox.textContent = check.message || "Пригласите 2 активных реферала.";
+          statusBox.textContent = check.message || "Подпишитесь на 2 основных спонсоров.";
           spinBtn.disabled = true;
         } else if (check.reason === "cooldown") {
           statusLine.textContent = "🔄 Статус: перезарядка";
@@ -523,7 +523,7 @@
           } else if (spinRes.error === "not_subscribed") {
             alert("❌ Нет подписки на всех активных спонсоров.");
           } else if (spinRes.error === "not_activated") {
-            alert("❌ Для доступа нужно 2 активных реферала.");
+            alert("❌ Для доступа нужна подписка на 2 основных спонсоров.");
           } else {
             alert(spinRes.error || "Ошибка спина.");
           }
