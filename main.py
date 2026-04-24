@@ -100,15 +100,15 @@ FAQ_ITEMS = {
             "• Бонус к Звёздному Колесу: +0%\n"
             "• После активации Колеса дополнительно даётся +5% к шансу выпадения звёздных секторов\n\n"
             "🥈 <b>Silver</b>\n"
-            "• 5–9 активных друзей\n"
+            "• 4–7 активных друга\n"
             "• Бонус к Звёздному Колесу: +20%\n"
             "• Итого с бонусом активации: +25% к шансу выпадения звёздных секторов\n\n"
             "🥇 <b>Gold</b>\n"
-            "• 10–14 активных друзей\n"
+            "• 8–11 активных друзей\n"
             "• Бонус к Звёздному Колесу: +45%\n"
             "• Итого с бонусом активации: +50% к шансу выпадения звёздных секторов\n\n"
             "💎 <b>Diamond</b>\n"
-            "• 15+ активных друзей\n"
+            "• 12+ активных друзей\n"
             "• Бонус к Звёздному Колесу: +80%\n"
             "• Итого с бонусом активации: +85% к шансу выпадения звёздных секторов\n\n"
             "⚡ Если у вас активен буст, он дополнительно повышает шанс выпадения звёздных секторов."
@@ -253,7 +253,7 @@ async def check_subscription(user_id, channel, context):
 
 
 def get_level_info(ref_count: int):
-    if ref_count >= 15:
+    if ref_count >= 12:
         return {
             "name": "Diamond",
             "emoji": "💎",
@@ -261,27 +261,27 @@ def get_level_info(ref_count: int):
             "next_target": None,
             "next_name": None,
         }
-    if ref_count >= 10:
+    if ref_count >= 8:
         return {
             "name": "Gold",
             "emoji": "🥇",
             "bonus_percent": 45,
-            "next_target": 15,
+            "next_target": 12,
             "next_name": "Diamond",
         }
-    if ref_count >= 5:
+    if ref_count >= 4:
         return {
             "name": "Silver",
             "emoji": "🥈",
             "bonus_percent": 20,
-            "next_target": 10,
+            "next_target": 8,
             "next_name": "Gold",
         }
     return {
         "name": "Bronze",
         "emoji": "🥉",
         "bonus_percent": 0,
-        "next_target": 5,
+        "next_target": 4,
         "next_name": "Silver",
     }
 
@@ -2141,15 +2141,15 @@ def get_level_progress_data(ref_count: int):
 
     if level["name"] == "Bronze":
         base = 0
-        target = 5
+        target = 4
         current_in_level = ref_count
     elif level["name"] == "Silver":
-        base = 5
-        target = 10
+        base = 4
+        target = 8
         current_in_level = ref_count - base
     elif level["name"] == "Gold":
-        base = 10
-        target = 15
+        base = 8
+        target = 12
         current_in_level = ref_count - base
     else:
         return {
