@@ -22,3 +22,9 @@ pre_rollback*
 restored_ok*
 texts.bak.*
 *.log
+*.bak*
+*.before*
+*.broken*
+*.save*
+*.old*
+*.texts.bak.*
